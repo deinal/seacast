@@ -7,6 +7,10 @@ graphs
 *.sif
 sweeps
 test_*.sh
+.ipynb_checkpoints
+*.ipynb
+*.out
+*.log
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
