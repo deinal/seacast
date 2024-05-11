@@ -1,5 +1,6 @@
 # Standard library
 from argparse import ArgumentParser
+from pathlib import Path
 
 # Third-party
 import numpy as np
@@ -10,7 +11,7 @@ import torch_geometric as pyg
 from neural_lam import utils
 
 MESH_HEIGHT = 0.1
-MESH_LEVEL_DIST = 0.2
+MESH_LEVEL_DIST = 0.08
 GRID_HEIGHT = 0
 
 
@@ -22,18 +23,19 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="meps_example",
-        help="Datast to load grid coordinates from (default: meps_example)",
+        default="baltic_sea",
+        help="Datast to load grid coordinates from (default: baltic_sea)",
     )
     parser.add_argument(
         "--graph",
         type=str,
-        default="multiscale",
-        help="Graph to plot (default: multiscale)",
+        default="hierarchical",
+        help="Graph to plot (default: hierarchical)",
     )
     parser.add_argument(
         "--save",
         type=str,
+        default="hi_graph",
         help="Name of .html file to save interactive plot to (default: None)",
     )
     parser.add_argument(
@@ -41,6 +43,18 @@ def main():
         type=int,
         default=0,
         help="If the axis should be displayed (default: 0 (No))",
+    )
+    parser.add_argument(
+        "--plot_grid",
+        type=int,
+        default=0,
+        help="If the grid should be plotted (default: 0 (No))",
+    )
+    parser.add_argument(
+        "--plot_intra_level_edges",
+        type=int,
+        default=1,
+        help="If the grid should be plotted (default: 1 (Yes))",
     )
 
     args = parser.parse_args()
@@ -67,7 +81,7 @@ def main():
     ]
 
     # Extract values needed, turn to numpy
-    grid_pos = grid_static_features[:, :2].numpy()
+    grid_pos = grid_static_features[:, [1, 0]].numpy()
     # Add in z-dimension
     z_grid = GRID_HEIGHT * np.ones((grid_pos.shape[0],))
     grid_pos = np.concatenate(
@@ -75,10 +89,13 @@ def main():
     )
 
     # List of edges to plot, (edge_index, color, line_width, label)
-    edge_plot_list = [
-        (m2g_edge_index.numpy(), "black", 0.4, "M2G"),
-        (g2m_edge_index.numpy(), "black", 0.4, "G2M"),
-    ]
+    if args.plot_grid:
+        edge_plot_list = [
+            (m2g_edge_index.numpy(), "black", 0.4, "M2G"),
+            (g2m_edge_index.numpy(), "black", 0.4, "G2M"),
+        ]
+    else:
+        edge_plot_list = []
 
     # Mesh positioning and edges to plot differ if we have a hierarchical graph
     if hierarchical:
@@ -98,25 +115,31 @@ def main():
             )
         ]
         mesh_pos = np.concatenate(mesh_level_pos, axis=0)
+        mesh_pos = mesh_pos[:, [1, 0, 2]]
 
         # Add inter-level mesh edges
         edge_plot_list += [
-            (level_ei.numpy(), "blue", 1, f"M2M Level {level}")
+            (level_ei.numpy(), "navy", 1, f"M2M Level {level}")
             for level, level_ei in enumerate(m2m_edge_index)
         ]
 
         # Add intra-level mesh edges
-        up_edges_ei = np.concatenate(
-            [level_up_ei.numpy() for level_up_ei in mesh_up_edge_index], axis=1
-        )
-        down_edges_ei = np.concatenate(
-            [level_down_ei.numpy() for level_down_ei in mesh_down_edge_index],
-            axis=1,
-        )
-        edge_plot_list.append((up_edges_ei, "green", 1, "Mesh up"))
-        edge_plot_list.append((down_edges_ei, "green", 1, "Mesh down"))
+        if args.plot_intra_level_edges:
+            up_edges_ei = np.concatenate(
+                [level_up_ei.numpy() for level_up_ei in mesh_up_edge_index],
+                axis=1,
+            )
+            down_edges_ei = np.concatenate(
+                [
+                    level_down_ei.numpy()
+                    for level_down_ei in mesh_down_edge_index
+                ],
+                axis=1,
+            )
+            edge_plot_list.append((up_edges_ei, "gold", 1, "Mesh up"))
+            edge_plot_list.append((down_edges_ei, "gold", 1, "Mesh down"))
 
-        mesh_node_size = 2.5
+        mesh_node_size = 1
     else:
         mesh_pos = mesh_static_features.numpy()
 
@@ -128,7 +151,7 @@ def main():
             (mesh_pos, np.expand_dims(z_mesh, axis=1)), axis=1
         )
 
-        edge_plot_list.append((m2m_edge_index.numpy(), "blue", 1, "M2M"))
+        edge_plot_list.append((m2m_edge_index.numpy(), "navy", 1, "M2M"))
 
     # All node positions in one array
     node_pos = np.concatenate((mesh_pos, grid_pos), axis=0)
@@ -166,31 +189,44 @@ def main():
         data_objs.append(scatter_obj)
 
     # Add node objects
-
-    data_objs.append(
-        go.Scatter3d(
-            x=grid_pos[:, 0],
-            y=grid_pos[:, 1],
-            z=grid_pos[:, 2],
-            mode="markers",
-            marker={"color": "black", "size": 1},
-            name="Grid nodes",
+    if args.plot_grid:
+        data_objs.append(
+            go.Scatter3d(
+                x=grid_pos[:, 0],
+                y=grid_pos[:, 1],
+                z=grid_pos[:, 2],
+                mode="markers",
+                marker={"color": "black", "size": 1},
+                name="Grid nodes",
+            )
         )
-    )
     data_objs.append(
         go.Scatter3d(
             x=mesh_pos[:, 0],
             y=mesh_pos[:, 1],
             z=mesh_pos[:, 2],
             mode="markers",
-            marker={"color": "blue", "size": mesh_node_size},
+            marker={"color": "navy", "size": mesh_node_size},
             name="Mesh nodes",
         )
     )
 
     fig = go.Figure(data=data_objs)
 
-    fig.update_layout(scene_aspectmode="data")
+    fig.update_layout(
+        scene_aspectmode="data",
+        scene={
+            "xaxis": {"visible": bool(args.show_axis), "autorange": "reversed"},
+            "yaxis": {"visible": bool(args.show_axis)},
+            "zaxis": {"visible": bool(args.show_axis)},
+            "camera": {"eye": {"x": 1.5, "y": 0, "z": 2}},
+        },
+        width=1200,
+        height=700,
+        margin={"l": 0, "r": 0, "b": 50, "t": 0},
+        showlegend=False,
+    )
+
     fig.update_traces(connectgaps=False)
 
     if not args.show_axis:
@@ -204,7 +240,10 @@ def main():
         )
 
     if args.save:
-        fig.write_html(args.save, include_plotlyjs="cdn")
+        fig.write_html(
+            Path("figures", f"{args.save}.html"), include_plotlyjs="cdn"
+        )
+        fig.write_image(Path("figures", f"{args.save}.pdf"), scale=1)
     else:
         fig.show()
 

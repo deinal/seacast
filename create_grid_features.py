@@ -15,8 +15,8 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="meps_example",
-        help="Dataset to compute weights for (default: meps_example)",
+        default="baltic_sea",
+        help="Dataset to compute weights for (default: baltic_sea)",
     )
     args = parser.parse_args()
 
@@ -31,7 +31,7 @@ def main():
     grid_xy = grid_xy / pos_max  # Divide by maximum coordinate
 
     geopotential = torch.tensor(
-        np.load(os.path.join(static_dir_path, "surface_geopotential.npy"))
+        np.load(os.path.join(static_dir_path, "ocean_depth.npy"))
     )  # (N_x, N_y)
     geopotential = geopotential.flatten(0, 1).unsqueeze(1)  # (N_grid,1)
     gp_min = torch.min(geopotential)
@@ -40,7 +40,7 @@ def main():
     geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_grid, 1)
 
     grid_border_mask = torch.tensor(
-        np.load(os.path.join(static_dir_path, "border_mask.npy")),
+        np.load(os.path.join(static_dir_path, "land_mask.npy")),
         dtype=torch.int64,
     )  # (N_x, N_y)
     grid_border_mask = (

@@ -20,44 +20,32 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="meps_example",
-        help="Dataset to compute weights for (default: meps_example)",
+        default="baltic_sea",
+        help="Dataset to compute weights for (default: baltic_sea)",
     )
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=32,
+        default=12,
         help="Batch size when iterating over the dataset",
     )
     parser.add_argument(
         "--step_length",
         type=int,
-        default=3,
-        help="Step length in hours to consider single time step (default: 3)",
+        default=1,
+        help="Step length in days to consider single time step (default: 1)",
     )
     parser.add_argument(
         "--n_workers",
         type=int,
-        default=4,
-        help="Number of workers in data loader (default: 4)",
+        default=12,
+        help="Number of workers in data loader (default: 16)",
     )
     args = parser.parse_args()
 
     static_dir_path = os.path.join("data", args.dataset, "static")
 
-    # Create parameter weights based on height
-    # based on fig A.1 in graph cast paper
-    w_dict = {
-        "2": 1.0,
-        "0": 0.1,
-        "65": 0.065,
-        "1000": 0.1,
-        "850": 0.05,
-        "500": 0.03,
-    }
-    w_list = np.array(
-        [w_dict[par.split("_")[-2]] for par in constants.PARAM_NAMES]
-    )
+    w_list = np.ones(len(constants.PARAM_NAMES))
     print("Saving parameter weights...")
     np.save(
         os.path.join(static_dir_path, "parameter_weights.npy"),
@@ -69,20 +57,18 @@ def main():
         args.dataset,
         split="train",
         subsample_step=1,
-        pred_length=63,
+        pred_length=6,
         standardize=False,
     )  # Without standardization
     loader = torch.utils.data.DataLoader(
         ds, args.batch_size, shuffle=False, num_workers=args.n_workers
     )
-    # Compute mean and std.-dev. of each parameter (+ flux forcing)
+    # Compute mean and std.-dev. of each parameter
     # across full dataset
     print("Computing mean and std.-dev. for parameters...")
     means = []
     squares = []
-    flux_means = []
-    flux_squares = []
-    for init_batch, target_batch, forcing_batch in tqdm(loader):
+    for init_batch, target_batch, _ in tqdm(loader):
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
@@ -91,24 +77,13 @@ def main():
             torch.mean(batch**2, dim=(1, 2))
         )  # (N_batch, d_features,)
 
-        # Flux at 1st windowed position is index 1 in forcing
-        flux_batch = forcing_batch[:, :, :, 1]
-        flux_means.append(torch.mean(flux_batch))  # (,)
-        flux_squares.append(torch.mean(flux_batch**2))  # (,)
-
     mean = torch.mean(torch.cat(means, dim=0), dim=0)  # (d_features)
     second_moment = torch.mean(torch.cat(squares, dim=0), dim=0)
     std = torch.sqrt(second_moment - mean**2)  # (d_features)
 
-    flux_mean = torch.mean(torch.stack(flux_means))  # (,)
-    flux_second_moment = torch.mean(torch.stack(flux_squares))  # (,)
-    flux_std = torch.sqrt(flux_second_moment - flux_mean**2)  # (,)
-    flux_stats = torch.stack((flux_mean, flux_std))
-
-    print("Saving mean, std.-dev, flux_stats...")
+    print("Saving mean, std.-dev...")
     torch.save(mean, os.path.join(static_dir_path, "parameter_mean.pt"))
     torch.save(std, os.path.join(static_dir_path, "parameter_std.pt"))
-    torch.save(flux_stats, os.path.join(static_dir_path, "flux_stats.pt"))
 
     # Compute mean and std.-dev. of one-step differences across the dataset
     print("Computing mean and std.-dev. for one-step differences...")
@@ -116,13 +91,13 @@ def main():
         args.dataset,
         split="train",
         subsample_step=1,
-        pred_length=63,
+        pred_length=6,
         standardize=True,
     )  # Re-load with standardization
     loader_standard = torch.utils.data.DataLoader(
         ds_standard, args.batch_size, shuffle=False, num_workers=args.n_workers
     )
-    used_subsample_len = (65 // args.step_length) * args.step_length
+    used_subsample_len = (8 // args.step_length) * args.step_length
 
     diff_means = []
     diff_squares = []

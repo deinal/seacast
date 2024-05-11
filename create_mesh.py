@@ -13,8 +13,8 @@ import torch_geometric as pyg
 from torch_geometric.utils.convert import from_networkx
 
 
-def plot_graph(graph, title=None):
-    fig, axis = plt.subplots(figsize=(8, 8), dpi=200)  # W,H
+def plot_graph(graph, title=None, graph_type=None):
+    fig, axis = plt.subplots(figsize=(12, 6), dpi=200)  # W,H
     edge_index = graph.edge_index
     pos = graph.pos
 
@@ -61,7 +61,8 @@ def plot_graph(graph, title=None):
     if title is not None:
         axis.set_title(title)
 
-    return fig, axis
+    plt.savefig(os.path.join("figures", graph_type, f"{title}.png"))
+    plt.close()
 
 
 def sort_nodes_internally(nx_graph):
@@ -104,34 +105,44 @@ def from_networkx_with_start_index(nx_graph, start_index):
     return pyg_graph
 
 
-def mk_2d_graph(xy, nx, ny):
+def mk_2d_graph(xy, nx, ny, land_mask):
     xm, xM = np.amin(xy[0][0, :]), np.amax(xy[0][0, :])
     ym, yM = np.amin(xy[1][:, 0]), np.amax(xy[1][:, 0])
 
     # avoid nodes on border
     dx = (xM - xm) / nx
     dy = (yM - ym) / ny
-    lx = np.linspace(xm + dx / 2, xM - dx / 2, nx)
-    ly = np.linspace(ym + dy / 2, yM - dy / 2, ny)
+    lx = np.linspace(xm + dx / 2, xM - dx / 2, nx, dtype=np.float32)
+    ly = np.linspace(ym + dy / 2, yM - dy / 2, ny, dtype=np.float32)
 
     mg = np.meshgrid(lx, ly)
     g = networkx.grid_2d_graph(len(ly), len(lx))
 
-    for node in g.nodes:
-        g.nodes[node]["pos"] = np.array([mg[0][node], mg[1][node]])
+    # kdtree for nearest neighbor search of land nodes
+    land_points = np.argwhere(land_mask.T).astype(np.float32)
+    land_kdtree = scipy.spatial.KDTree(land_points)
 
-    # add diagonal edges
-    g.add_edges_from(
-        [((x, y), (x + 1, y + 1)) for x in range(nx - 1) for y in range(ny - 1)]
-        + [
-            ((x + 1, y), (x, y + 1))
-            for x in range(nx - 1)
-            for y in range(ny - 1)
-        ]
-    )
+    # add nodes excluding land
+    for node in list(g.nodes):
+        node_pos = np.array([mg[0][node], mg[1][node]], dtype=np.float32)
+        dist, _ = land_kdtree.query(node_pos, k=1)
+        if dist < np.sqrt(0.5):
+            g.remove_node(node)
+        else:
+            g.nodes[node]["pos"] = node_pos
+
+    # add diagonal edges if both nodes exist
+    for x in range(nx - 1):
+        for y in range(ny - 1):
+            if g.has_node((x, y)) and g.has_node((x + 1, y + 1)):
+                g.add_edge((x, y), (x + 1, y + 1))
+            if g.has_node((x + 1, y)) and g.has_node((x, y + 1)):
+                g.add_edge((x + 1, y), (x, y + 1))
 
     # turn into directed graph
     dg = networkx.DiGraph(g)
+
+    # add node data
     for u, v in g.edges():
         d = np.sqrt(np.sum((g.nodes[u]["pos"] - g.nodes[v]["pos"]) ** 2))
         dg.edges[u, v]["len"] = d
@@ -139,6 +150,11 @@ def mk_2d_graph(xy, nx, ny):
         dg.add_edge(v, u)
         dg.edges[v, u]["len"] = d
         dg.edges[v, u]["vdiff"] = g.nodes[v]["pos"] - g.nodes[u]["pos"]
+
+    # add self edge if needed
+    for v, degree in list(dg.degree()):
+        if degree <= 1:
+            dg.add_edge(v, v, len=0, vdiff=np.array([0, 0]))
 
     return dg
 
@@ -155,15 +171,15 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="meps_example",
+        default="baltic_sea",
         help="Dataset to load grid point coordinates from "
-        "(default: meps_example)",
+        "(default: baltic_sea)",
     )
     parser.add_argument(
         "--graph",
         type=str,
-        default="multiscale",
-        help="Name to save graph as (default: multiscale)",
+        default="hierarchical",
+        help="Name to save graph as (default: hierarchical)",
     )
     parser.add_argument(
         "--plot",
@@ -175,14 +191,15 @@ def main():
     parser.add_argument(
         "--levels",
         type=int,
+        default=3,
         help="Limit multi-scale mesh to given number of levels, "
         "from bottom up (default: None (no limit))",
     )
     parser.add_argument(
         "--hierarchical",
         type=int,
-        default=0,
-        help="Generate hierarchical mesh graph (default: 0, no)",
+        default=1,
+        help="Generate hierarchical mesh graph (default: 1, yes)",
     )
     args = parser.parse_args()
 
@@ -191,7 +208,12 @@ def main():
     graph_dir_path = os.path.join("graphs", args.graph)
     os.makedirs(graph_dir_path, exist_ok=True)
 
+    if args.plot:
+        fig_dir_path = os.path.join("figures", args.graph)
+        os.makedirs(fig_dir_path, exist_ok=True)
+
     xy = np.load(os.path.join(static_dir_path, "nwp_xy.npy"))
+    land_mask = np.load(os.path.join(static_dir_path, "land_mask.npy"))
 
     grid_xy = torch.tensor(xy)
     pos_max = torch.max(torch.abs(grid_xy))
@@ -216,10 +238,13 @@ def main():
     G = []
     for lev in range(1, mesh_levels + 1):
         n = int(nleaf / (nx**lev))
-        g = mk_2d_graph(xy, n, n)
+        g = mk_2d_graph(xy, n, n, land_mask)
         if args.plot:
-            plot_graph(from_networkx(g), title=f"Mesh graph, level {lev}")
-            plt.show()
+            plot_graph(
+                from_networkx(g),
+                title=f"Mesh graph, level {lev}",
+                graph_type=args.graph,
+            )
 
         G.append(g)
 
@@ -298,14 +323,16 @@ def main():
 
             if args.plot:
                 plot_graph(
-                    pyg_down, title=f"Down graph, {from_level} -> {to_level}"
+                    pyg_down,
+                    title=f"Down graph, {from_level} -> {to_level}",
+                    graph_type=args.graph,
                 )
-                plt.show()
 
                 plot_graph(
-                    pyg_down, title=f"Up graph, {to_level} -> {from_level}"
+                    pyg_down,
+                    title=f"Up graph, {to_level} -> {from_level}",
+                    graph_type=args.graph,
                 )
-                plt.show()
 
         # Save up and down edges
         save_edges_list(up_graphs, "mesh_up", graph_dir_path)
@@ -363,8 +390,7 @@ def main():
         mesh_pos = [pyg_m2m.pos.to(torch.float32)]
 
         if args.plot:
-            plot_graph(pyg_m2m, title="Mesh-to-mesh")
-            plt.show()
+            plot_graph(pyg_m2m, title="Mesh-to-mesh", graph_type=args.graph)
 
     # Save m2m edges
     save_edges_list(m2m_graphs, "m2m", graph_dir_path)
@@ -390,7 +416,7 @@ def main():
     vm_xy = np.array([xy for _, xy in vm.data("pos")])
     # distance between mesh nodes
     dm = np.sqrt(
-        np.sum((vm.data("pos")[(0, 1, 0)] - vm.data("pos")[(0, 0, 0)]) ** 2)
+        np.sum((vm.data("pos")[(0, 20, 21)] - vm.data("pos")[(0, 20, 22)]) ** 2)
     )
 
     # grid nodes
@@ -431,21 +457,26 @@ def main():
         neigh_idxs = kdt_g.query_ball_point(vm[v]["pos"], dm * DM_SCALE)
         for i in neigh_idxs:
             u = vg_list[i]
-            # add edge from grid to mesh
-            G_g2m.add_edge(u, v)
-            d = np.sqrt(
-                np.sum((G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]) ** 2)
-            )
-            G_g2m.edges[u, v]["len"] = d
-            G_g2m.edges[u, v]["vdiff"] = (
-                G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]
-            )
+            # omit grid nodes inside mask
+            if not land_mask[u[1:]]:
+                # add edge from grid to mesh
+                G_g2m.add_edge(u, v)
+                d = np.sqrt(
+                    np.sum((G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]) ** 2)
+                )
+                G_g2m.edges[u, v]["len"] = d
+                G_g2m.edges[u, v]["vdiff"] = (
+                    G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]
+                )
 
     pyg_g2m = from_networkx(G_g2m)
 
     if args.plot:
-        plot_graph(pyg_g2m, title="Grid-to-mesh")
-        plt.show()
+        pyg_g2m_reversed = pyg_g2m.clone()
+        pyg_g2m_reversed.edge_index = pyg_g2m.edge_index[[1, 0]]
+        plot_graph(
+            pyg_g2m_reversed, title="Grid-to-mesh", graph_type=args.graph
+        )
 
     #
     # Mesh2Grid
@@ -462,8 +493,13 @@ def main():
 
     # add edges from mesh to grid
     for v in vg_list:
-        # find 4 nearest neighbours (index to vm_xy)
-        neigh_idxs = kdt_m.query(G_m2g.nodes[v]["pos"], 4)[1]
+        # omit grid nodes inside mask
+        if not land_mask[v[1:]]:
+            # find 4 nearest neighbours (index to vm_xy)
+            neigh_idxs = kdt_m.query(G_m2g.nodes[v]["pos"], 4)[1]
+        else:
+            # cover remaining grid nodes
+            neigh_idxs = [kdt_m.query(G_m2g.nodes[v]["pos"], 1)[1]]
         for i in neigh_idxs:
             u = vm_list[i]
             # add edge from mesh to grid
@@ -483,8 +519,7 @@ def main():
     pyg_m2g = from_networkx(G_m2g_int)
 
     if args.plot:
-        plot_graph(pyg_m2g, title="Mesh-to-grid")
-        plt.show()
+        plot_graph(pyg_m2g, title="Mesh-to-grid", graph_type=args.graph)
 
     # Save g2m and m2g everything
     # g2m
