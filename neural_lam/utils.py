@@ -48,7 +48,7 @@ def load_static_data(dataset_name, device="cpu"):
         torch.tensor(border_mask_np, dtype=torch.float32, device=device)
         .flatten(0, 1)
         .unsqueeze(1)
-    )  # (N_grid, 1)
+    )  # (N_grid_full, 1)
 
     grid_static_features = loads_file(
         "grid_features.pt"

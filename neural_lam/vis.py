@@ -68,7 +68,9 @@ def plot_prediction(
 ):
     """
     Plot example prediction and grond truth.
-    Each has shape (N_grid,)
+    pred: (N_grid,)
+    target: (N_grid,)
+    obs_mask (N_grid_full,)
     """
     # Get common scale for values
     if vrange is None:
@@ -77,19 +79,22 @@ def plot_prediction(
     else:
         vmin, vmax = vrange
 
-    # Set up masking of border region
-    mask_reshaped = obs_mask.reshape(*constants.GRID_SHAPE)
-    pixel_alpha = mask_reshaped.cpu().numpy()  # Faded border region
+    # Map pred and target back onto the full grid
+    obs_mask = obs_mask.cpu().numpy().astype(bool)
+    original_shape = obs_mask.shape
+    full_pred = np.full(original_shape, np.nan)
+    full_target = np.full(original_shape, np.nan)
+    full_pred[obs_mask] = pred.cpu().numpy()
+    full_target[obs_mask] = target.cpu().numpy()
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 7))
 
     # Plot pred and target
-    for ax, data in zip(axes, (target, pred)):
-        data_grid = data.reshape(*constants.GRID_SHAPE).cpu().numpy()
+    for ax, data in zip(axes, (full_target, full_pred)):
+        data_grid = data.reshape(*constants.GRID_SHAPE)
         im = ax.imshow(
             data_grid,
             origin="lower",
-            alpha=pixel_alpha,
             vmin=vmin,
             vmax=vmax,
             cmap=colormap,
@@ -120,18 +125,19 @@ def plot_spatial_error(error, obs_mask, title=None, vrange=None):
     else:
         vmin, vmax = vrange
 
-    # Set up masking of border region
-    mask_reshaped = obs_mask.reshape(*constants.GRID_SHAPE)
-    pixel_alpha = mask_reshaped.cpu().numpy()  # Faded border region
+    # Map error onto the full grid
+    obs_mask = obs_mask.cpu().numpy().astype(bool)
+    original_shape = obs_mask.shape
+    full_error = np.full(original_shape, np.nan)
+    full_error[obs_mask] = error.cpu().numpy()
 
     fig, ax = plt.subplots(figsize=(5, 4.8))
 
-    error_grid = error.reshape(*constants.GRID_SHAPE).cpu().numpy()
+    error_grid = full_error.reshape(*constants.GRID_SHAPE)
 
     im = ax.imshow(
         error_grid,
         origin="lower",
-        alpha=pixel_alpha,
         vmin=vmin,
         vmax=vmax,
         cmap="OrRd",

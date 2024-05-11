@@ -18,7 +18,8 @@ class WeatherDataset(torch.utils.data.Dataset):
     N_t = 8//subsample_step (= 8 for 1 day steps)
     dim_x = 774
     dim_y = 763
-    N_grid = 774x763 = 590562
+    N_grid_full = 774x763 = 590562
+    N_grid = 147134
     d_features = 18
     d_forcing = 2
     """
@@ -71,6 +72,9 @@ class WeatherDataset(torch.utils.data.Dataset):
         # If subsample index should be sampled (only duing training)
         self.random_subsample = split == "train"
 
+        border_mask = utils.load_static_data(dataset_name, "cpu")["border_mask"]
+        self.interior_mask_bool = (1 - border_mask)[:, 0].to(torch.bool)
+
     def __len__(self):
         return len(self.sample_names)
 
@@ -98,7 +102,10 @@ class WeatherDataset(torch.utils.data.Dataset):
         # (N_t, dim_x, dim_y, d_features)
 
         # Flatten spatial dim
-        sample = sample.flatten(1, 2)  # (N_t, N_grid, d_features)
+        sample = sample.flatten(1, 2)  # (N_t, N_grid_full, d_features)
+        sample = sample[
+            :, self.interior_mask_bool, :
+        ]  # (N_t, N_grid, d_features)
 
         # Uniformly sample time id to start sample from
         init_id = torch.randint(

@@ -426,9 +426,17 @@ def main():
     G_grid.clear_edges()
 
     # vg features (only pos introduced here)
+    nodes_to_remove = []
     for node in G_grid.nodes:
-        # pos is in feature but here explicit for convenience
-        G_grid.nodes[node]["pos"] = np.array([xy[0][node], xy[1][node]])
+        # Remove the node from the graph if it is a land node
+        if land_mask[node[0], node[1]]:
+            nodes_to_remove.append(node)
+        else:
+            # pos is in feature but here explicit for convenience
+            G_grid.nodes[node]["pos"] = np.array([xy[0][node], xy[1][node]])
+
+    for node in nodes_to_remove:
+        G_grid.remove_node(node)
 
     # add 1000 to node key to separate grid nodes (1000,i,j) from mesh nodes
     # (i,j) and impose sorting order such that vm are the first nodes
@@ -457,17 +465,15 @@ def main():
         neigh_idxs = kdt_g.query_ball_point(vm[v]["pos"], dm * DM_SCALE)
         for i in neigh_idxs:
             u = vg_list[i]
-            # omit grid nodes inside mask
-            if not land_mask[u[1:]]:
-                # add edge from grid to mesh
-                G_g2m.add_edge(u, v)
-                d = np.sqrt(
-                    np.sum((G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]) ** 2)
-                )
-                G_g2m.edges[u, v]["len"] = d
-                G_g2m.edges[u, v]["vdiff"] = (
-                    G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]
-                )
+            # add edge from grid to mesh
+            G_g2m.add_edge(u, v)
+            d = np.sqrt(
+                np.sum((G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]) ** 2)
+            )
+            G_g2m.edges[u, v]["len"] = d
+            G_g2m.edges[u, v]["vdiff"] = (
+                G_g2m.nodes[u]["pos"] - G_g2m.nodes[v]["pos"]
+            )
 
     pyg_g2m = from_networkx(G_g2m)
 
@@ -493,24 +499,20 @@ def main():
 
     # add edges from mesh to grid
     for v in vg_list:
-        # omit grid nodes inside mask
-        if not land_mask[v[1:]]:
-            # find 4 nearest neighbours (index to vm_xy)
-            neigh_idxs = kdt_m.query(G_m2g.nodes[v]["pos"], 4)[1]
-        else:
-            # cover remaining grid nodes
-            neigh_idxs = [kdt_m.query(G_m2g.nodes[v]["pos"], 1)[1]]
+        # find 4 nearest neighbours (index to vm_xy)
+        neigh_idxs = kdt_m.query(G_m2g.nodes[v]["pos"], 4)[1]
         for i in neigh_idxs:
             u = vm_list[i]
-            # add edge from mesh to grid
-            G_m2g.add_edge(u, v)
             d = np.sqrt(
                 np.sum((G_m2g.nodes[u]["pos"] - G_m2g.nodes[v]["pos"]) ** 2)
             )
-            G_m2g.edges[u, v]["len"] = d
-            G_m2g.edges[u, v]["vdiff"] = (
-                G_m2g.nodes[u]["pos"] - G_m2g.nodes[v]["pos"]
-            )
+            if d < (4 * dm):
+                # add edge from mesh to grid
+                G_m2g.add_edge(u, v)
+                G_m2g.edges[u, v]["len"] = d
+                G_m2g.edges[u, v]["vdiff"] = (
+                    G_m2g.nodes[u]["pos"] - G_m2g.nodes[v]["pos"]
+                )
 
     # relabel nodes to integers (sorted)
     G_m2g_int = networkx.convert_node_labels_to_integers(

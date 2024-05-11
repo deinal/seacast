@@ -58,7 +58,7 @@ class ARModel(pl.LightningModule):
         (
             self.num_grid_nodes,
             grid_static_dim,
-        ) = self.grid_static_features.shape  # 590562 = 774x763
+        ) = self.grid_static_features.shape
         self.grid_dim = (
             2 * constants.GRID_STATE_DIM
             + grid_static_dim
@@ -124,12 +124,11 @@ class ARModel(pl.LightningModule):
         """
         raise NotImplementedError("No prediction step implemented")
 
-    def unroll_prediction(self, init_states, forcing_features, true_states):
+    def unroll_prediction(self, init_states, forcing_features):
         """
         Roll out prediction taking multiple autoregressive steps with model
         init_states: (B, 2, num_grid_nodes, d_f)
         forcing_features: (B, pred_steps, num_grid_nodes, d_static_f)
-        true_states: (B, pred_steps, num_grid_nodes, d_f)
         """
         prev_prev_state = init_states[:, 0]
         prev_state = init_states[:, 1]
@@ -139,7 +138,6 @@ class ARModel(pl.LightningModule):
 
         for i in range(pred_steps):
             forcing = forcing_features[:, i]
-            border_state = true_states[:, i]
 
             pred_state, pred_std = self.predict_step(
                 prev_state, prev_prev_state, forcing
@@ -147,19 +145,13 @@ class ARModel(pl.LightningModule):
             # state: (B, num_grid_nodes, d_f)
             # pred_std: (B, num_grid_nodes, d_f) or None
 
-            # Overwrite border with true state
-            new_state = (
-                self.border_mask * border_state
-                + self.interior_mask * pred_state
-            )
-
-            prediction_list.append(new_state)
+            prediction_list.append(pred_state)
             if self.output_std:
                 pred_std_list.append(pred_std)
 
             # Update conditioning states
             prev_prev_state = prev_state
-            prev_state = new_state
+            prev_state = pred_state
 
         prediction = torch.stack(
             prediction_list, dim=1
@@ -189,7 +181,7 @@ class ARModel(pl.LightningModule):
         ) = batch
 
         prediction, pred_std = self.unroll_prediction(
-            init_states, forcing_features, target_states
+            init_states, forcing_features
         )  # (B, pred_steps, num_grid_nodes, d_f)
         # prediction: (B, pred_steps, num_grid_nodes, d_f)
         # pred_std: (B, pred_steps, num_grid_nodes, d_f) or (d_f,)
@@ -204,9 +196,7 @@ class ARModel(pl.LightningModule):
 
         # Compute loss
         batch_loss = torch.mean(
-            self.loss(
-                prediction, target, pred_std, mask=self.interior_mask_bool
-            )
+            self.loss(prediction, target, pred_std)
         )  # mean over unrolled times and batch
 
         log_dict = {"train_loss": batch_loss}
@@ -235,9 +225,7 @@ class ARModel(pl.LightningModule):
         prediction, target, pred_std = self.common_step(batch)
 
         time_step_loss = torch.mean(
-            self.loss(
-                prediction, target, pred_std, mask=self.interior_mask_bool
-            ),
+            self.loss(prediction, target, pred_std),
             dim=0,
         )  # (time_steps-1)
         mean_loss = torch.mean(time_step_loss)
@@ -257,7 +245,6 @@ class ARModel(pl.LightningModule):
             prediction,
             target,
             pred_std,
-            mask=self.interior_mask_bool,
             sum_vars=False,
         )  # (B, pred_steps, d_f)
         self.val_metrics["mse"].append(entry_mses)
@@ -283,9 +270,7 @@ class ARModel(pl.LightningModule):
         # pred_std: (B, pred_steps, num_grid_nodes, d_f) or (d_f,)
 
         time_step_loss = torch.mean(
-            self.loss(
-                prediction, target, pred_std, mask=self.interior_mask_bool
-            ),
+            self.loss(prediction, target, pred_std),
             dim=0,
         )  # (time_steps-1,)
         mean_loss = torch.mean(time_step_loss)
@@ -311,16 +296,13 @@ class ARModel(pl.LightningModule):
                 prediction,
                 target,
                 pred_std,
-                mask=self.interior_mask_bool,
                 sum_vars=False,
             )  # (B, pred_steps, d_f)
             self.test_metrics[metric_name].append(batch_metric_vals)
 
         if self.output_std:
             # Store output std. per variable, spatially averaged
-            mean_pred_std = torch.mean(
-                pred_std[..., self.interior_mask_bool, :], dim=-2
-            )  # (B, pred_steps, d_f)
+            mean_pred_std = torch.mean(pred_std, dim=-2)  # (B, pred_steps, d_f)
             self.test_metrics["output_std"].append(mean_pred_std)
 
         # Save per-sample spatial loss for specific times
