@@ -25,14 +25,9 @@ def load_dataset_stats(dataset_name, device="cpu"):
     data_mean = loads_file("parameter_mean.pt")  # (d_features,)
     data_std = loads_file("parameter_std.pt")  # (d_features,)
 
-    flux_stats = loads_file("flux_stats.pt")  # (2,)
-    flux_mean, flux_std = flux_stats
-
     return {
         "data_mean": data_mean,
         "data_std": data_std,
-        "flux_mean": flux_mean,
-        "flux_std": flux_std,
     }
 
 
@@ -48,7 +43,7 @@ def load_static_data(dataset_name, device="cpu"):
         )
 
     # Load border mask, 1. if node is part of border, else 0.
-    border_mask_np = np.load(os.path.join(static_dir_path, "border_mask.npy"))
+    border_mask_np = np.load(os.path.join(static_dir_path, "land_mask.npy"))
     border_mask = (
         torch.tensor(border_mask_np, dtype=torch.float32, device=device)
         .flatten(0, 1)
@@ -253,7 +248,7 @@ def fractional_plot_bundle(fraction):
     Get the tueplots bundle, but with figure width as a fraction of
     the page width.
     """
-    bundle = bundles.neurips2023(usetex=True, family="serif")
+    bundle = bundles.neurips2023(usetex=False, family="serif")
     bundle.update(figsizes.neurips2023())
     original_figsize = bundle["figure.figsize"]
     bundle["figure.figsize"] = (

@@ -3,6 +3,7 @@ import os
 
 # Third-party
 import matplotlib.pyplot as plt
+import momo
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -57,7 +58,7 @@ class ARModel(pl.LightningModule):
         (
             self.num_grid_nodes,
             grid_static_dim,
-        ) = self.grid_static_features.shape  # 63784 = 268x238
+        ) = self.grid_static_features.shape  # 590562 = 774x763
         self.grid_dim = (
             2 * constants.GRID_STATE_DIM
             + grid_static_dim
@@ -72,7 +73,7 @@ class ARModel(pl.LightningModule):
             "interior_mask", 1.0 - self.border_mask, persistent=False
         )  # (num_grid_nodes, 1), 1 for non-border
 
-        self.step_length = args.step_length  # Number of hours per pred. step
+        self.step_length = args.step_length  # Number of days per pred. step
         self.val_metrics = {
             "mse": [],
         }
@@ -94,9 +95,7 @@ class ARModel(pl.LightningModule):
         self.spatial_loss_maps = []
 
     def configure_optimizers(self):
-        opt = torch.optim.AdamW(
-            self.parameters(), lr=self.lr, betas=(0.9, 0.95)
-        )
+        opt = momo.MomoAdam(self.parameters(), lr=self.lr)
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
@@ -400,13 +399,20 @@ class ARModel(pl.LightningModule):
                         target_t[:, var_i],
                         self.interior_mask[:, 0],
                         title=f"{var_name} ({var_unit}), "
-                        f"t={t_i} ({self.step_length*t_i} h)",
+                        f"t={t_i} ({self.step_length*t_i} d)",
+                        colormap=colormap,
                         vrange=var_vrange,
                     )
-                    for var_i, (var_name, var_unit, var_vrange) in enumerate(
+                    for var_i, (
+                        var_name,
+                        var_unit,
+                        colormap,
+                        var_vrange,
+                    ) in enumerate(
                         zip(
                             constants.PARAM_NAMES_SHORT,
                             constants.PARAM_UNITS,
+                            constants.PARAM_COLORMAPS,
                             var_vranges,
                         )
                     )
@@ -542,7 +548,7 @@ class ARModel(pl.LightningModule):
                 vis.plot_spatial_error(
                     loss_map,
                     self.interior_mask[:, 0],
-                    title=f"Test loss, t={t_i} ({self.step_length*t_i} h)",
+                    title=f"Test loss, t={t_i} ({self.step_length*t_i} d)",
                 )
                 for t_i, loss_map in zip(
                     constants.VAL_STEP_LOG_ERRORS, mean_spatial_loss

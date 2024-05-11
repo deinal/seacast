@@ -34,15 +34,15 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="meps_example",
+        default="baltic_sea",
         help="Dataset, corresponding to name in data directory "
-        "(default: meps_example)",
+        "(default: baltic_sea)",
     )
     parser.add_argument(
         "--model",
         type=str,
-        default="graph_lam",
-        help="Model architecture to train/evaluate (default: graph_lam)",
+        default="hi_lam",
+        help="Model architecture to train/evaluate (default: hi_lam)",
     )
     parser.add_argument(
         "--subset_ds",
@@ -53,6 +53,12 @@ def main():
     )
     parser.add_argument(
         "--seed", type=int, default=42, help="random seed (default: 42)"
+    )
+    parser.add_argument(
+        "--n_nodes",
+        type=int,
+        default=1,
+        help="Number of nodes to run job on (default: 1)",
     )
     parser.add_argument(
         "--n_workers",
@@ -92,9 +98,9 @@ def main():
     parser.add_argument(
         "--graph",
         type=str,
-        default="multiscale",
+        default="hierarchical",
         help="Graph to load and use in graph-based model "
-        "(default: multiscale)",
+        "(default: hierarchical)",
     )
     parser.add_argument(
         "--hidden_dim",
@@ -154,9 +160,8 @@ def main():
     parser.add_argument(
         "--step_length",
         type=int,
-        default=3,
-        help="Step length in hours to consider single time step 1-3 "
-        "(default: 3)",
+        default=1,
+        help="Step length in days to consider single time step " "(default: 1)",
     )
     parser.add_argument(
         "--lr", type=float, default=1e-3, help="learning rate (default: 0.001)"
@@ -187,7 +192,7 @@ def main():
 
     # Asserts for arguments
     assert args.model in MODELS, f"Unknown model: {args.model}"
-    assert args.step_length <= 3, "Too high step length"
+    assert args.step_length <= 6, "Too high step length"
     assert args.eval in (
         None,
         "val",
@@ -214,7 +219,7 @@ def main():
         shuffle=True,
         num_workers=args.n_workers,
     )
-    max_pred_length = (65 // args.step_length) - 2  # 19
+    max_pred_length = (8 // args.step_length) - 2  # 6
     val_loader = torch.utils.data.DataLoader(
         WeatherDataset(
             args.dataset,
@@ -270,6 +275,7 @@ def main():
         max_epochs=args.epochs,
         deterministic=True,
         strategy="ddp",
+        num_nodes=args.n_nodes,
         accelerator=device_name,
         logger=logger,
         log_every_n_steps=1,

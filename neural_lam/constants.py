@@ -2,119 +2,115 @@
 import cartopy
 import numpy as np
 
-WANDB_PROJECT = "neural-lam"
+WANDB_PROJECT = "balticnet"
 
 SECONDS_IN_YEAR = (
     365 * 24 * 60 * 60
 )  # Assuming no leap years in dataset (2024 is next)
 
 # Log prediction error for these lead times
-VAL_STEP_LOG_ERRORS = np.array([1, 2, 3, 5, 10, 15, 19])
+VAL_STEP_LOG_ERRORS = np.array([1, 3, 6])
 
 # Log these metrics to wandb as scalar values for
 # specific variables and lead times
 # List of metrics to watch, including any prefix (e.g. val_rmse)
 METRICS_WATCH = []
+
 # Dict with variables and lead times to log watched metrics for
 # Format is a dictionary that maps from a variable index to
 # a list of lead time steps
-VAR_LEADS_METRICS_WATCH = {
-    6: [2, 19],  # t_2
-    14: [2, 19],  # wvint_0
-    15: [2, 19],  # z_1000
-}
+VAR_LEADS_METRICS_WATCH = {}
 
 # Variable names
 PARAM_NAMES = [
-    "pres_heightAboveGround_0_instant",
-    "pres_heightAboveSea_0_instant",
-    "nlwrs_heightAboveGround_0_accum",
-    "nswrs_heightAboveGround_0_accum",
-    "r_heightAboveGround_2_instant",
-    "r_hybrid_65_instant",
-    "t_heightAboveGround_2_instant",
-    "t_hybrid_65_instant",
-    "t_isobaricInhPa_500_instant",
-    "t_isobaricInhPa_850_instant",
-    "u_hybrid_65_instant",
-    "u_isobaricInhPa_850_instant",
-    "v_hybrid_65_instant",
-    "v_isobaricInhPa_850_instant",
-    "wvint_entireAtmosphere_0_instant",
-    "z_isobaricInhPa_1000_instant",
-    "z_isobaricInhPa_500_instant",
+    "Sea water potential temperature",
+    "Sea water potential temperature at sea floor",
+    "Ocean mixed layer thickness defined by sigma theta",
+    "Sea ice area fraction",
+    "Sea ice thickness",
+    "Sea water salinity",
+    "Sea water salinity at sea floor",
+    "Eastward sea water velocity",
+    "Northward sea water velocity",
+    "Mass concentration of chlorophyll a in sea water",
+    "Mole concentration of ammonium in sea water",
+    "Mole concentration of nitrate in sea water",
+    "Mole concentration of dissolved molecular oxygen in sea water",
+    "Mole concentration of dissolved molecular oxygen at the bottom",
+    "Sea water pH reported on total scale",
+    "Mole concentration of phosphate in sea water",
+    "Surface partial pressure of carbon dioxide in sea water",
+    "Secchi depth of sea water",
 ]
 
 PARAM_NAMES_SHORT = [
-    "pres_0g",
-    "pres_0s",
-    "nlwrs_0",
-    "nswrs_0",
-    "r_2",
-    "r_65",
-    "t_2",
-    "t_65",
-    "t_500",
-    "t_850",
-    "u_65",
-    "u_850",
-    "v_65",
-    "v_850",
-    "wvint_0",
-    "z_1000",
-    "z_500",
+    "thetao",
+    "bottomT",
+    "mlotst",
+    "siconc",
+    "sithick",
+    "so",
+    "sob",
+    "uo",
+    "vo",
+    "chl",
+    "nh4",
+    "no3",
+    "o2",
+    "o2b",
+    "ph",
+    "po4",
+    "spco2",
+    "zsd",
 ]
+
 PARAM_UNITS = [
-    "Pa",
-    "Pa",
-    "W/m\\textsuperscript{2}",
-    "W/m\\textsuperscript{2}",
-    "-",  # unitless
+    "°C",
+    "°C",
+    "m",
     "-",
-    "K",
-    "K",
-    "K",
-    "K",
+    "m",
+    "‰",
+    "‰",
     "m/s",
     "m/s",
-    "m/s",
-    "m/s",
-    "kg/m\\textsuperscript{2}",
-    "m\\textsuperscript{2}/s\\textsuperscript{2}",
-    "m\\textsuperscript{2}/s\\textsuperscript{2}",
+    "mg/m³",
+    "mmol/m³",
+    "mmol/m³",
+    "mmol/m³",
+    "mmol/m³",
+    "-",
+    "mmol/m³",
+    "Pa",
+    "m",
+]
+
+PARAM_COLORMAPS = [
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "coolwarm",
+    "coolwarm",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
+    "viridis",
 ]
 
 # Projection and grid
-# Hard coded for now, but should eventually be part of dataset desc. files
-GRID_SHAPE = (268, 238)  # (y, x)
-
-LAMBERT_PROJ_PARAMS = {
-    "a": 6367470,
-    "b": 6367470,
-    "lat_0": 63.3,
-    "lat_1": 63.3,
-    "lat_2": 63.3,
-    "lon_0": 15.0,
-    "proj": "lcc",
-}
-
-GRID_LIMITS = [  # In projection
-    -1059506.5523409774,  # min x
-    1310493.4476590226,  # max x
-    -1331732.4471934352,  # min y
-    1338267.5528065648,  # max y
-]
-
-# Create projection
-LAMBERT_PROJ = cartopy.crs.LambertConformal(
-    central_longitude=LAMBERT_PROJ_PARAMS["lon_0"],
-    central_latitude=LAMBERT_PROJ_PARAMS["lat_0"],
-    standard_parallels=(
-        LAMBERT_PROJ_PARAMS["lat_1"],
-        LAMBERT_PROJ_PARAMS["lat_2"],
-    ),
-)
+GRID_SHAPE = (774, 763)  # (y, x)
+GRID_LIMITS = [9.04, 30.21, 53.01, 65.89]
+PROJECTION = cartopy.crs.PlateCarree()
 
 # Data dimensions
-GRID_FORCING_DIM = 5 * 3 + 1  # 5 feat. for 3 time-step window + 1 batch-static
-GRID_STATE_DIM = 17
+GRID_FORCING_DIM = 2 * 3  # 2 feat. for 3 time-step window + 0 batch-static
+GRID_STATE_DIM = 18
