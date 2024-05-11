@@ -11,6 +11,10 @@ test_*.sh
 *.ipynb
 *.out
 *.log
+*.sh
+*.html
+slurm
+hierarchical
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
