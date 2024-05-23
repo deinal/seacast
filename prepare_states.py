@@ -7,7 +7,7 @@ from glob import glob
 import numpy as np
 
 
-def prepare_states(in_directory, out_directory, n_states, prefix):
+def prepare_states(in_directory, out_directory, mask, n_states, prefix):
     """
     Processes and concatenates state sequences from numpy files.
 
@@ -25,7 +25,7 @@ def prepare_states(in_directory, out_directory, n_states, prefix):
 
     # Process each file, concatenate with the next t-1 files
     for i in range(len(files) - n_states + 1):
-        out_filename = f"{prefix}_{os.path.basename(files[i])}"
+        out_filename = f"{prefix}_{os.path.basename(files[i+2])}"
         out_file = os.path.join(out_directory, out_filename)
 
         if os.path.isfile(out_file):
@@ -35,7 +35,8 @@ def prepare_states(in_directory, out_directory, n_states, prefix):
 
         # Load each state to concatenate
         for j in range(n_states):
-            state_sequence.append(np.load(files[i + j]))
+            state = np.load(files[i + j])
+            state_sequence.append(state[mask])
 
         # Concatenate along new axis (time axis)
         full_state = np.stack(state_sequence, axis=0)
@@ -60,6 +61,13 @@ def main():
         help="Directory containing .npy files",
     )
     parser.add_argument(
+        "-m",
+        "--mask",
+        type=str,
+        required=True,
+        help="Path to land mask",
+    )
+    parser.add_argument(
         "-o",
         "--out_dir",
         type=str,
@@ -82,7 +90,9 @@ def main():
     )
     args = parser.parse_args()
 
-    prepare_states(args.data_dir, args.out_dir, args.n_states, args.prefix)
+    ocean_mask = ~np.load(args.mask)
+
+    prepare_states(args.data_dir, args.out_dir, ocean_mask, args.n_states, args.prefix)
 
 
 if __name__ == "__main__":

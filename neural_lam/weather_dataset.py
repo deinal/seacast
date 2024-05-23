@@ -45,6 +45,8 @@ class WeatherDataset(torch.utils.data.Dataset):
         sample_paths = glob.glob(
             os.path.join(self.sample_dir_path, member_file_regexp)
         )
+        if split == "test":
+            sample_paths = sorted(sample_paths)
         self.sample_names = [path.split("/")[-1][:-4] for path in sample_paths]
         # Now on form "yyymmddhh_mbrXXX"
 
@@ -85,7 +87,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         try:
             full_sample = torch.tensor(
                 np.load(sample_path), dtype=torch.float32
-            )  # (N_t', dim_x, dim_y, d_features)
+            )  # (N_t', N_grid, d_features)
         except ValueError:
             print(f"Failed to load {sample_path}")
 
@@ -99,13 +101,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         sample = full_sample[
             subsample_index : subsample_end_index : self.subsample_step
         ]
-        # (N_t, dim_x, dim_y, d_features)
-
-        # Flatten spatial dim
-        sample = sample.flatten(1, 2)  # (N_t, N_grid_full, d_features)
-        sample = sample[
-            :, self.interior_mask_bool, :
-        ]  # (N_t, N_grid, d_features)
+        # (N_t, N_grid, d_features)
 
         # Uniformly sample time id to start sample from
         init_id = torch.randint(
