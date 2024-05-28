@@ -68,11 +68,6 @@ class ARModel(pl.LightningModule):
         # Instantiate loss function
         self.loss = metrics.get_metric(args.loss)
 
-        # Pre-compute interior mask for use in loss function
-        self.register_buffer(
-            "interior_mask", 1.0 - self.border_mask, persistent=False
-        )  # (num_grid_nodes, 1), 1 for non-border
-
         self.step_length = args.step_length  # Number of days per pred. step
         self.val_metrics = {
             "mse": [],
@@ -104,9 +99,9 @@ class ARModel(pl.LightningModule):
     @property
     def interior_mask_bool(self):
         """
-        Get the interior mask as a boolean (N,) mask.
+        Get the interior mask as a boolean (N_grid, d_features) mask.
         """
-        return self.interior_mask[:, 0].to(torch.bool)
+        return self.interior_mask[0].to(torch.bool)
 
     @staticmethod
     def expand_to_batch(x, batch_size):
@@ -145,13 +140,16 @@ class ARModel(pl.LightningModule):
             # state: (B, num_grid_nodes, d_f)
             # pred_std: (B, num_grid_nodes, d_f) or None
 
-            prediction_list.append(pred_state)
+            # Overwrite border with true state
+            new_state = self.interior_mask * pred_state
+
+            prediction_list.append(new_state)
             if self.output_std:
                 pred_std_list.append(pred_std)
 
             # Update conditioning states
             prev_prev_state = prev_state
-            prev_state = pred_state
+            prev_state = new_state
 
         prediction = torch.stack(
             prediction_list, dim=1
@@ -196,7 +194,9 @@ class ARModel(pl.LightningModule):
 
         # Compute loss
         batch_loss = torch.mean(
-            self.loss(prediction, target, pred_std)
+            self.loss(
+                prediction, target, pred_std, grid_weights=self.grid_weights
+            )
         )  # mean over unrolled times and batch
 
         log_dict = {"train_loss": batch_loss}
@@ -225,7 +225,9 @@ class ARModel(pl.LightningModule):
         prediction, target, pred_std = self.common_step(batch)
 
         time_step_loss = torch.mean(
-            self.loss(prediction, target, pred_std),
+            self.loss(
+                prediction, target, pred_std, grid_weights=self.grid_weights
+            ),
             dim=0,
         )  # (time_steps-1)
         mean_loss = torch.mean(time_step_loss)
@@ -270,7 +272,9 @@ class ARModel(pl.LightningModule):
         # pred_std: (B, pred_steps, num_grid_nodes, d_f) or (d_f,)
 
         time_step_loss = torch.mean(
-            self.loss(prediction, target, pred_std),
+            self.loss(
+                prediction, target, pred_std, grid_weights=self.grid_weights
+            ),
             dim=0,
         )  # (time_steps-1,)
         mean_loss = torch.mean(time_step_loss)
@@ -296,6 +300,7 @@ class ARModel(pl.LightningModule):
                 prediction,
                 target,
                 pred_std,
+                grid_weights=self.grid_weights,
                 sum_vars=False,
             )  # (B, pred_steps, d_f)
             self.test_metrics[metric_name].append(batch_metric_vals)
@@ -379,7 +384,8 @@ class ARModel(pl.LightningModule):
                     vis.plot_prediction(
                         pred_t[:, var_i],
                         target_t[:, var_i],
-                        self.interior_mask[:, 0],
+                        self.interior_mask_bool[:, var_i],
+                        self.full_mask[:, var_i],
                         title=f"{var_name} ({var_unit}), "
                         f"t={t_i} ({self.step_length*t_i} d)",
                         colormap=colormap,
@@ -392,9 +398,9 @@ class ARModel(pl.LightningModule):
                         var_vrange,
                     ) in enumerate(
                         zip(
-                            constants.PARAM_NAMES_SHORT,
-                            constants.PARAM_UNITS,
-                            constants.PARAM_COLORMAPS,
+                            constants.EXP_PARAM_NAMES_SHORT,
+                            constants.EXP_PARAM_UNITS,
+                            constants.EXP_PARAM_COLORMAPS,
                             var_vranges,
                         )
                     )
@@ -405,7 +411,7 @@ class ARModel(pl.LightningModule):
                     {
                         f"{var_name}_example_{example_i}": wandb.Image(fig)
                         for var_name, fig in zip(
-                            constants.PARAM_NAMES_SHORT, var_figs
+                            constants.EXP_PARAM_NAMES_SHORT, var_figs
                         )
                     }
                 )
@@ -461,7 +467,7 @@ class ARModel(pl.LightningModule):
         # Check if metrics are watched, log exact values for specific vars
         if full_log_name in constants.METRICS_WATCH:
             for var_i, timesteps in constants.VAR_LEADS_METRICS_WATCH.items():
-                var = constants.PARAM_NAMES_SHORT[var_i]
+                var = constants.EXP_PARAM_NAMES_SHORT[var_i]
                 log_dict.update(
                     {
                         f"{full_log_name}_{var}_step_{step}": metric_tensor[
@@ -529,7 +535,7 @@ class ARModel(pl.LightningModule):
             loss_map_figs = [
                 vis.plot_spatial_error(
                     loss_map,
-                    self.interior_mask[:, 0],
+                    self.full_mask[:, 0],
                     title=f"Test loss, t={t_i} ({self.step_length*t_i} d)",
                 )
                 for t_i, loss_map in zip(
@@ -543,7 +549,7 @@ class ARModel(pl.LightningModule):
 
             # also make without title and save as pdf
             pdf_loss_map_figs = [
-                vis.plot_spatial_error(loss_map, self.interior_mask[:, 0])
+                vis.plot_spatial_error(loss_map, self.full_mask[:, 0])
                 for loss_map in mean_spatial_loss
             ]
             pdf_loss_maps_dir = os.path.join(wandb.run.dir, "spatial_loss_maps")

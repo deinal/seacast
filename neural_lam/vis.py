@@ -21,7 +21,7 @@ def plot_error_map(errors, title=None, step_length=3):
     max_errors = errors_np.max(axis=1)  # d_f
     errors_norm = errors_np / np.expand_dims(max_errors, axis=1)
 
-    fig, ax = plt.subplots(figsize=(15, 10))
+    fig, ax = plt.subplots(figsize=(15, 20))
 
     ax.imshow(
         errors_norm,
@@ -51,7 +51,7 @@ def plot_error_map(errors, title=None, step_length=3):
     y_ticklabels = [
         f"{name} ({unit})"
         for name, unit in zip(
-            constants.PARAM_NAMES_SHORT, constants.PARAM_UNITS
+            constants.EXP_PARAM_NAMES_SHORT, constants.EXP_PARAM_UNITS
         )
     ]
     ax.set_yticklabels(y_ticklabels, rotation=30, size=label_size)
@@ -64,12 +64,19 @@ def plot_error_map(errors, title=None, step_length=3):
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
 def plot_prediction(
-    pred, target, obs_mask, title=None, colormap="viridis", vrange=None
+    pred,
+    target,
+    interior_mask,
+    obs_mask,
+    title=None,
+    colormap="viridis",
+    vrange=None,
 ):
     """
     Plot example prediction and grond truth.
     pred: (N_grid,)
     target: (N_grid,)
+    interior_mask (N_grid,)
     obs_mask (N_grid_full,)
     """
     # Get common scale for values
@@ -80,14 +87,14 @@ def plot_prediction(
         vmin, vmax = vrange
 
     # Map pred and target back onto the full grid
-    obs_mask = obs_mask.cpu().numpy().astype(bool)
+    obs_mask = obs_mask.cpu().numpy()
     original_shape = obs_mask.shape
     full_pred = np.full(original_shape, np.nan)
     full_target = np.full(original_shape, np.nan)
-    full_pred[obs_mask] = pred.cpu().numpy()
-    full_target[obs_mask] = target.cpu().numpy()
+    full_pred[obs_mask] = pred[interior_mask].cpu().numpy()
+    full_target[obs_mask] = target[interior_mask].cpu().numpy()
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 7))
+    fig, axes = plt.subplots(1, 2, figsize=(20, 5))
 
     # Plot pred and target
     for ax, data in zip(axes, (full_target, full_pred)):
@@ -116,7 +123,8 @@ def plot_prediction(
 def plot_spatial_error(error, obs_mask, title=None, vrange=None):
     """
     Plot errors over spatial map
-    Error and obs_mask has shape (N_grid,)
+    error: (N_grid,)
+    obs_mask: (N_grid_full,)
     """
     # Get common scale for values
     if vrange is None:
@@ -126,12 +134,12 @@ def plot_spatial_error(error, obs_mask, title=None, vrange=None):
         vmin, vmax = vrange
 
     # Map error onto the full grid
-    obs_mask = obs_mask.cpu().numpy().astype(bool)
+    obs_mask = obs_mask.cpu().numpy()
     original_shape = obs_mask.shape
     full_error = np.full(original_shape, np.nan)
     full_error[obs_mask] = error.cpu().numpy()
 
-    fig, ax = plt.subplots(figsize=(5, 4.8))
+    fig, ax = plt.subplots(figsize=(10, 4.8))
 
     error_grid = full_error.reshape(*constants.GRID_SHAPE)
 

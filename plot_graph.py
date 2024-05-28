@@ -11,7 +11,7 @@ import torch_geometric as pyg
 from neural_lam import utils
 
 MESH_HEIGHT = 0.1
-MESH_LEVEL_DIST = 0.08
+MESH_LEVEL_DIST = 0.03
 GRID_HEIGHT = 0
 
 
@@ -23,8 +23,8 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="baltic_sea",
-        help="Datast to load grid coordinates from (default: baltic_sea)",
+        default="mediterranean",
+        help="Datast to load grid coordinates from (default: mediterranean)",
     )
     parser.add_argument(
         "--graph",
@@ -219,9 +219,9 @@ def main():
             "xaxis": {"visible": bool(args.show_axis), "autorange": "reversed"},
             "yaxis": {"visible": bool(args.show_axis)},
             "zaxis": {"visible": bool(args.show_axis)},
-            "camera": {"eye": {"x": 1.5, "y": 0, "z": 2}},
+            "camera": {"eye": {"x": 1, "y": 0, "z": 2}},
         },
-        width=1200,
+        width=1400,
         height=700,
         margin={"l": 0, "r": 0, "b": 50, "t": 0},
         showlegend=False,

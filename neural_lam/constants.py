@@ -2,14 +2,14 @@
 import cartopy
 import numpy as np
 
-WANDB_PROJECT = "balticnet"
+WANDB_PROJECT = "seacast"
 
 SECONDS_IN_YEAR = (
     365 * 24 * 60 * 60
 )  # Assuming no leap years in dataset (2024 is next)
 
 # Log prediction error for these lead times
-VAL_STEP_LOG_ERRORS = np.array([1, 3, 6])
+VAL_STEP_LOG_ERRORS = np.array([1, 3, 4])
 
 # Log these metrics to wandb as scalar values for
 # specific variables and lead times
@@ -23,82 +23,38 @@ VAR_LEADS_METRICS_WATCH = {}
 
 # Variable names
 PARAM_NAMES = [
-    "Sea water potential temperature",
-    "Sea water potential temperature at sea floor",
-    "Ocean mixed layer thickness defined by sigma theta",
-    "Sea ice area fraction",
-    "Sea ice thickness",
-    "Sea water salinity",
-    "Sea water salinity at sea floor",
     "Eastward sea water velocity",
     "Northward sea water velocity",
-    "Mass concentration of chlorophyll a in sea water",
-    "Mole concentration of ammonium in sea water",
-    "Mole concentration of nitrate in sea water",
-    "Mole concentration of dissolved molecular oxygen in sea water",
-    "Mole concentration of dissolved molecular oxygen at the bottom",
-    "Sea water pH reported on total scale",
-    "Mole concentration of phosphate in sea water",
-    "Surface partial pressure of carbon dioxide in sea water",
-    "Secchi depth of sea water",
+    "Ocean mixed layer thickness defined by sigma theta",
+    "Sea water salinity",
+    "Sea surface height above geoid",
+    "Sea water potential temperature",
+    "Sea water potential temperature at sea floor",
 ]
 
 PARAM_NAMES_SHORT = [
-    "thetao",
-    "bottomT",
-    "mlotst",
-    "siconc",
-    "sithick",
-    "so",
-    "sob",
     "uo",
     "vo",
-    "chl",
-    "nh4",
-    "no3",
-    "o2",
-    "o2b",
-    "ph",
-    "po4",
-    "spco2",
-    "zsd",
+    "mlotst",
+    "so",
+    "zos",
+    "thetao",
+    "bottomT",
 ]
 
 PARAM_UNITS = [
-    "°C",
-    "°C",
-    "m",
-    "-",
-    "m",
-    "‰",
-    "‰",
     "m/s",
     "m/s",
-    "mg/m³",
-    "mmol/m³",
-    "mmol/m³",
-    "mmol/m³",
-    "mmol/m³",
     "-",
-    "mmol/m³",
-    "Pa",
+    "‰",
     "m",
+    "°C",
+    "°C",
 ]
 
 PARAM_COLORMAPS = [
-    "viridis",
-    "viridis",
-    "viridis",
-    "viridis",
-    "viridis",
-    "viridis",
-    "viridis",
     "coolwarm",
     "coolwarm",
-    "viridis",
-    "viridis",
-    "viridis",
-    "viridis",
     "viridis",
     "viridis",
     "viridis",
@@ -106,11 +62,62 @@ PARAM_COLORMAPS = [
     "viridis",
 ]
 
+LEVELS = [
+    True,
+    True,
+    False,
+    True,
+    False,
+    True,
+    False,
+]
+
 # Projection and grid
-GRID_SHAPE = (774, 763)  # (y, x)
-GRID_LIMITS = [9.04, 30.21, 53.01, 65.89]
+GRID_SHAPE = (371, 1013)  # (y, x)
+GRID_LIMITS = [-6, 36.291668, 30.1875, 45.979168]
 PROJECTION = cartopy.crs.PlateCarree()
 
 # Data dimensions
 GRID_FORCING_DIM = 2 * 3  # 2 feat. for 3 time-step window + 0 batch-static
-GRID_STATE_DIM = 18
+GRID_STATE_DIM = 75
+
+DEPTHS = [
+    1.0182366,
+    5.4649634,
+    10.536604,
+    16.270586,
+    22.706392,
+    29.885643,
+    37.852192,
+    46.652210,
+    56.334286,
+    66.949490,
+    78.551500,
+    91.196630,
+    104.94398,
+    119.85543,
+    135.99580,
+    153.43285,
+    172.23735,
+    192.48314,
+]
+
+
+# New lists
+EXP_PARAM_NAMES_SHORT = []
+EXP_PARAM_UNITS = []
+EXP_PARAM_COLORMAPS = []
+
+for name, unit, colormap, levels_applies in zip(
+    PARAM_NAMES_SHORT, PARAM_UNITS, PARAM_COLORMAPS, LEVELS
+):
+    if levels_applies:
+        for depth in DEPTHS:
+            depth_int = round(depth)
+            EXP_PARAM_NAMES_SHORT.append(f"{name}_{depth_int}")
+            EXP_PARAM_UNITS.append(unit)
+            EXP_PARAM_COLORMAPS.append(colormap)
+    else:
+        EXP_PARAM_NAMES_SHORT.append(name)
+        EXP_PARAM_UNITS.append(unit)
+        EXP_PARAM_COLORMAPS.append(colormap)

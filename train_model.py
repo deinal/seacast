@@ -34,9 +34,9 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="baltic_sea",
+        default="mediterranean",
         help="Dataset, corresponding to name in data directory "
-        "(default: baltic_sea)",
+        "(default: mediterranean)",
     )
     parser.add_argument(
         "--model",
@@ -219,7 +219,7 @@ def main():
         shuffle=True,
         num_workers=args.n_workers,
     )
-    max_pred_length = (8 // args.step_length) - 2  # 6
+    max_pred_length = (7 // args.step_length) - 2  # 5
     val_loader = torch.utils.data.DataLoader(
         WeatherDataset(
             args.dataset,

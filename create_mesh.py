@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import networkx
 import numpy as np
 import scipy.spatial
+import skimage.draw
 import torch
 import torch_geometric as pyg
 from torch_geometric.utils.convert import from_networkx
@@ -105,6 +106,13 @@ def from_networkx_with_start_index(nx_graph, start_index):
     return pyg_graph
 
 
+def crosses_land(node1, node2, land_mask, threshold=8):
+    x1, y1 = node1
+    x2, y2 = node2
+    rr, cc = skimage.draw.line(round(y1), round(x1), round(y2), round(x2))
+    return np.sum(land_mask[rr, cc]) >= threshold
+
+
 def mk_2d_graph(xy, nx, ny, land_mask):
     xm, xM = np.amin(xy[0][0, :]), np.amax(xy[0][0, :])
     ym, yM = np.amin(xy[1][:, 0]), np.amax(xy[1][:, 0])
@@ -139,6 +147,15 @@ def mk_2d_graph(xy, nx, ny, land_mask):
             if g.has_node((x + 1, y)) and g.has_node((x, y + 1)):
                 g.add_edge((x + 1, y), (x, y + 1))
 
+    # remove edges that goes across land
+    for u, v in list(g.edges()):
+        if crosses_land(g.nodes[u]["pos"], g.nodes[v]["pos"], land_mask):
+            g.remove_edge(u, v)
+
+    # # remove lonely nodes (nodes with no edges)
+    # lonely_nodes = [node for node in g.nodes if g.degree(node) == 0]
+    # g.remove_nodes_from(lonely_nodes)
+
     # turn into directed graph
     dg = networkx.DiGraph(g)
 
@@ -171,7 +188,7 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="baltic_sea",
+        default="mediterranean",
         help="Dataset to load grid point coordinates from "
         "(default: baltic_sea)",
     )
@@ -213,7 +230,8 @@ def main():
         os.makedirs(fig_dir_path, exist_ok=True)
 
     xy = np.load(os.path.join(static_dir_path, "nwp_xy.npy"))
-    land_mask = np.load(os.path.join(static_dir_path, "land_mask.npy"))
+    sea_mask = np.load(os.path.join(static_dir_path, "sea_mask.npy"))
+    land_mask = ~sea_mask[0]
 
     grid_xy = torch.tensor(xy)
     pos_max = torch.max(torch.abs(grid_xy))
@@ -288,21 +306,31 @@ def main():
 
             # add edges from mesh to grid
             for v in v_to_list:
-                # find 1(?) nearest neighbours (index to vm_xy)
-                neigh_idx = kdt_m.query(G_down.nodes[v]["pos"], 1)[1]
-                u = v_from_list[neigh_idx]
-
-                # add edge from mesh to grid
-                G_down.add_edge(u, v)
-                d = np.sqrt(
-                    np.sum(
-                        (G_down.nodes[u]["pos"] - G_down.nodes[v]["pos"]) ** 2
-                    )
-                )
-                G_down.edges[u, v]["len"] = d
-                G_down.edges[u, v]["vdiff"] = (
-                    G_down.nodes[u]["pos"] - G_down.nodes[v]["pos"]
-                )
+                # find k nearest neighbours (index to vm_xy)
+                neigh_idx = kdt_m.query(G_down.nodes[v]["pos"], k=16)[1]
+                for idx in neigh_idx:
+                    u = v_from_list[idx]
+                    # add edge from mesh to grid
+                    if not crosses_land(
+                        G_down.nodes[u]["pos"],
+                        G_down.nodes[v]["pos"],
+                        land_mask,
+                    ):
+                        G_down.add_edge(u, v)
+                        d = np.sqrt(
+                            np.sum(
+                                (
+                                    G_down.nodes[u]["pos"]
+                                    - G_down.nodes[v]["pos"]
+                                )
+                                ** 2
+                            )
+                        )
+                        G_down.edges[u, v]["len"] = d
+                        G_down.edges[u, v]["vdiff"] = (
+                            G_down.nodes[u]["pos"] - G_down.nodes[v]["pos"]
+                        )
+                        break
 
             # relabel nodes to integers (sorted)
             G_down_int = networkx.convert_node_labels_to_integers(
@@ -414,10 +442,20 @@ def main():
     # mesh nodes on lowest level
     vm = G_bottom_mesh.nodes
     vm_xy = np.array([xy for _, xy in vm.data("pos")])
+
+    # fin consecutive nodes on the same row
+    vm_pos = {key: pos for key, pos in vm.data("pos")}
+    sorted_keys = sorted(vm_pos.keys(), key=lambda k: (k[0], k[1], k[2]))
+    key1, key2 = None, None
+    for i in range(len(sorted_keys) - 1):
+        k1, k2 = sorted_keys[i], sorted_keys[i + 1]
+        if k1[0] == k2[0] and k1[1] == k2[1] and k1[2] + 1 == k2[2]:
+            if np.array_equal(vm_pos[k1][1], vm_pos[k2][1]):
+                key1, key2 = k1, k2
+                break
+
     # distance between mesh nodes
-    dm = np.sqrt(
-        np.sum((vm.data("pos")[(0, 20, 21)] - vm.data("pos")[(0, 20, 22)]) ** 2)
-    )
+    dm = np.sqrt(np.sum((vm.data("pos")[key1] - vm.data("pos")[key2]) ** 2))
 
     # grid nodes
     Ny, Nx = xy.shape[1:]

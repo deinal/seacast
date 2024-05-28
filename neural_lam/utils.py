@@ -43,12 +43,54 @@ def load_static_data(dataset_name, device="cpu"):
         )
 
     # Load border mask, 1. if node is part of border, else 0.
-    border_mask_np = np.load(os.path.join(static_dir_path, "land_mask.npy"))
-    border_mask = (
-        torch.tensor(border_mask_np, dtype=torch.float32, device=device)
-        .flatten(0, 1)
-        .unsqueeze(1)
-    )  # (N_grid_full, 1)
+    sea_mask_np = np.load(
+        os.path.join(static_dir_path, "sea_mask.npy")
+    )  # (depths, h, w)
+
+    # Mask for the surface grid
+    surface_mask_np = sea_mask_np[0]
+
+    # Grid mask for all depth levels to be multiplied with output states
+    grid_mask = torch.tensor(
+        sea_mask_np[:, surface_mask_np],
+        dtype=torch.float32,
+        device=device,
+    )  # (depths, N_grid)
+    interior_mask = []
+    for level_applies in constants.LEVELS:
+        if level_applies:
+            interior_mask.append(grid_mask)  # Multi level
+        else:
+            interior_mask.append(grid_mask[0].unsqueeze(0))  # Single level
+    interior_mask = (
+        torch.cat(interior_mask, dim=0).transpose(0, 1).unsqueeze(0)
+    )  # 1, N_grid, d_features
+
+    # Full grid mask, for plotting purposes
+    full_grid_mask = torch.tensor(
+        sea_mask_np, dtype=torch.float32, device=device
+    ).flatten(
+        1, 2
+    )  # (depths, N_grid_full)
+    full_mask = []
+    for level_applies in constants.LEVELS:
+        if level_applies:
+            full_mask.append(full_grid_mask)  # Multi level
+        else:
+            full_mask.append(full_grid_mask[0].unsqueeze(0))  # Single level
+    full_mask = (
+        torch.cat(full_mask, dim=0).transpose(0, 1).to(torch.bool)
+    )  # N_grid_full, d_features
+
+    # Load cell weights
+    grid_weights_np = np.load(
+        os.path.join(static_dir_path, "grid_weights.npy")
+    )  # (h, w)
+    grid_weights = torch.tensor(
+        grid_weights_np[surface_mask_np], dtype=torch.float32, device=device
+    ).unsqueeze(
+        1
+    )  # (N_grid, 1)
 
     grid_static_features = loads_file(
         "grid_features.pt"
@@ -70,7 +112,9 @@ def load_static_data(dataset_name, device="cpu"):
     )  # (d_f,)
 
     return {
-        "border_mask": border_mask,
+        "interior_mask": interior_mask,
+        "full_mask": full_mask,
+        "grid_weights": grid_weights,
         "grid_static_features": grid_static_features,
         "step_diff_mean": step_diff_mean,
         "step_diff_std": step_diff_std,

@@ -20,13 +20,13 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="baltic_sea",
-        help="Dataset to compute weights for (default: baltic_sea)",
+        default="mediterranean",
+        help="Dataset to compute weights for (default: mediterranean)",
     )
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=32,
+        default=8,
         help="Batch size when iterating over the dataset",
     )
     parser.add_argument(
@@ -38,14 +38,14 @@ def main():
     parser.add_argument(
         "--n_workers",
         type=int,
-        default=32,
-        help="Number of workers in data loader (default: 32)",
+        default=8,
+        help="Number of workers in data loader (default: 8)",
     )
     args = parser.parse_args()
 
     static_dir_path = os.path.join("data", args.dataset, "static")
 
-    w_list = np.ones(len(constants.PARAM_NAMES))
+    w_list = np.ones(len(constants.EXP_PARAM_NAMES_SHORT))
     print("Saving parameter weights...")
     np.save(
         os.path.join(static_dir_path, "parameter_weights.npy"),
@@ -57,7 +57,7 @@ def main():
         args.dataset,
         split="train",
         subsample_step=1,
-        pred_length=6,
+        pred_length=5,
         standardize=False,
     )  # Without standardization
     loader = torch.utils.data.DataLoader(
@@ -91,13 +91,13 @@ def main():
         args.dataset,
         split="train",
         subsample_step=1,
-        pred_length=6,
+        pred_length=5,
         standardize=True,
     )  # Re-load with standardization
     loader_standard = torch.utils.data.DataLoader(
         ds_standard, args.batch_size, shuffle=False, num_workers=args.n_workers
     )
-    used_subsample_len = (8 // args.step_length) * args.step_length
+    used_subsample_len = (7 // args.step_length) * args.step_length
 
     diff_means = []
     diff_squares = []

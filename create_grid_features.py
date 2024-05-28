@@ -15,44 +15,54 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="baltic_sea",
-        help="Dataset to compute weights for (default: baltic_sea)",
+        default="mediterranean",
+        help="Dataset to compute weights for (default: mediterranean)",
     )
     args = parser.parse_args()
 
     static_dir_path = os.path.join("data", args.dataset, "static")
 
     # -- Static grid node features --
-    grid_xy = torch.tensor(
-        np.load(os.path.join(static_dir_path, "nwp_xy.npy"))
+    coordinates = torch.tensor(
+        np.load(os.path.join(static_dir_path, "coordinates.npy"))
     )  # (2, N_x, N_y)
-    grid_xy = grid_xy.flatten(1, 2).T  # (N_grid_full, 2)
-    pos_max = torch.max(torch.abs(grid_xy))
-    grid_xy = grid_xy / pos_max  # Divide by maximum coordinate
+    coordinates = coordinates.flatten(1, 2).T  # (N_grid_full, 2)
+    pos_max = torch.max(torch.abs(coordinates))
+    coordinates = coordinates / pos_max  # Divide by maximum coordinate
 
-    geopotential = torch.tensor(
-        np.load(os.path.join(static_dir_path, "ocean_depth.npy"))
+    sea_depth = torch.tensor(
+        np.load(os.path.join(static_dir_path, "sea_depth.npy"))
     )  # (N_x, N_y)
-    geopotential = geopotential.flatten(0, 1).unsqueeze(1)  # (N_grid_full, 1)
-    gp_min = torch.min(geopotential)
-    gp_max = torch.max(geopotential)
-    # Rescale geopotential to [0,1]
-    geopotential = (geopotential - gp_min) / (
+    sea_depth = sea_depth.flatten(0, 1).unsqueeze(1)  # (N_grid_full, 1)
+    gp_min = torch.min(sea_depth)
+    gp_max = torch.max(sea_depth)
+    # Rescale sea_depth to [0,1]
+    sea_depth = (sea_depth - gp_min) / (gp_max - gp_min)  # (N_grid_full, 1)
+
+    sea_topography = torch.tensor(
+        np.load(os.path.join(static_dir_path, "sea_topography.npy"))
+    )  # (N_x, N_y)
+    sea_topography = sea_topography.flatten(0, 1).unsqueeze(
+        1
+    )  # (N_grid_full, 1)
+    gp_min = torch.min(sea_topography)
+    gp_max = torch.max(sea_topography)
+    # Rescale sea_topography to [0,1]
+    sea_topography = (sea_topography - gp_min) / (
         gp_max - gp_min
     )  # (N_grid_full, 1)
 
-    grid_border_mask = torch.tensor(
-        np.load(os.path.join(static_dir_path, "land_mask.npy")),
+    sea_mask = torch.tensor(
+        np.load(os.path.join(static_dir_path, "sea_mask.npy"))[0],
         dtype=torch.int64,
     )  # (N_x, N_y)
-    grid_border_mask = grid_border_mask.flatten(0, 1)  # (N_grid_full,)
-    interior_mask_bool = (1 - grid_border_mask).to(torch.bool)
+    sea_mask = sea_mask.flatten(0, 1).to(torch.bool)  # (N_grid_full,)
 
     # Concatenate grid features
     grid_features = torch.cat(
-        (grid_xy, geopotential), dim=1
+        (coordinates, sea_depth, sea_topography), dim=1
     )  # (N_grid_full, 3)
-    grid_features = grid_features[interior_mask_bool]  # (N_grid, 3)
+    grid_features = grid_features[sea_mask]  # (N_grid, 3)
 
     torch.save(grid_features, os.path.join(static_dir_path, "grid_features.pt"))
 
