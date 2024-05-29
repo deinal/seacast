@@ -12,6 +12,8 @@ tueplots>=0.0.8
 plotly>=5.15.0
 copernicusmarine>=1.2.0
 momo-opt>=0.1.0
+cdsapi>=0.7.0
+ecmwf-opendata>=0.3.8
 # for dev
 codespell>=2.0.0
 black>=21.9b0

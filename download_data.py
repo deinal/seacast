@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 # Third-party
 import cdsapi
 import copernicusmarine as cm
+import ecmwf.opendata as eo
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -164,7 +165,7 @@ def download_data(
     mask (xarray.Dataset): Bathymetry mask
     """
 
-    np_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
 
     current_date = start_date
     while current_date <= end_date:
@@ -209,7 +210,7 @@ def download_data(
         clean_data = np.nan_to_num(combined_data, nan=0.0)
 
         # Select only sea grid points
-        sea_data = clean_data[np_mask, :]  # n_grid, f
+        sea_data = clean_data[grid_mask, :]  # n_grid, f
 
         # Save combined data as one numpy file
         np.save(filename, sea_data)
@@ -240,7 +241,7 @@ def download_forecast(
     path_prefix (str): The directory path prefix where the files will be saved.
     mask (xarray.Dataset): Bathymetry mask
     """
-    np_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
 
     filename = f"{path_prefix}/{start_date.strftime('%Y%m%d')}.npy"
 
@@ -277,7 +278,7 @@ def download_forecast(
     combined_data = np.nan_to_num(combined_data, nan=0.0)
 
     # Select only sea grid points
-    sea_data = combined_data[:, np_mask, :]  # t, n_grid, f
+    sea_data = combined_data[:, grid_mask, :]  # t, n_grid, f
 
     # Save combined data as one numpy file
     np.save(filename, sea_data)
@@ -305,9 +306,9 @@ def download_era5(
     path_prefix (str): The directory path prefix where the files will be saved.
     mask (xarray.Dataset): Bathymetry mask.
     """
-    np_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
 
-    c = cdsapi.Client()
+    client = cdsapi.Client()
     current_date = start_date
     while current_date <= end_date:
         year = current_date.year
@@ -317,7 +318,7 @@ def download_era5(
         if os.path.isfile(filename):
             continue
 
-        c.retrieve(
+        client.retrieve(
             "reanalysis-era5-single-levels",
             {
                 "format": "netcdf",
@@ -363,7 +364,7 @@ def download_era5(
             clean_data = np.nan_to_num(combined_data, nan=0.0)
 
             np.save(
-                f"{path_prefix}/{date_str}.npy", clean_data[np_mask, :]
+                f"{path_prefix}/{date_str}.npy", clean_data[grid_mask, :]
             )  # n_grid, f
             print(f"Saved daily data to {path_prefix}/{date_str}.npy")
 
@@ -372,6 +373,87 @@ def download_era5(
             current_date = current_date.replace(year=year + 1, month=1, day=1)
         else:
             current_date = current_date.replace(month=int(month) + 1, day=1)
+
+
+def download_hres_forecast(
+    start_date,
+    path_prefix_static,
+    path_prefix,
+    request_variables,
+    ds_variables,
+    mask,
+):
+    """
+    Download ECMWF HRES forecast data for the next 10 days starting from today.
+
+    Args:
+    start_date (datetime): The start date for data retrieval.
+    path_prefix_static (str): Location of static data.
+    path_prefix (str): Path where the files will be saved.
+    request_variables (list): List of variables to download.
+    ds_variables (list): List of variables in the dataset.
+    mask (xarray.Dataset): Bathymetry mask
+    """
+    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+
+    # Set up HRES client
+    client = eo.Client(
+        source="ecmwf",
+        model="ifs",
+        resol="0p25",
+    )
+
+    grib_filename = f"{path_prefix}/{start_date.strftime('%Y%m%d')}.grib"
+
+    # Retrieve data
+    client.retrieve(
+        date=start_date.strftime("%Y-%m-%d"),
+        time=0,
+        type="fc",
+        stream="oper",
+        step=list(range(0, 240, 6)),  # 240 hours = 10 days
+        param=request_variables,
+        target=grib_filename,
+    )
+    print(f"Downloaded {grib_filename}")
+
+    # Open the datasets and drop conflicting height
+    datasets = []
+    for var in request_variables:
+        filter_keys = {"shortName": var}
+        ds = xr.open_dataset(
+            grib_filename, engine="cfgrib", filter_by_keys=filter_keys
+        )  # t, h, w
+        ds = ds.drop_vars(["heightAboveGround"], errors="ignore")
+        datasets.append(ds)
+    merged_ds = xr.merge(datasets)
+
+    # Resample to daily averages
+    daily_ds = merged_ds.resample(valid_time="1D").mean()
+
+    # Interpolate onto the sea coordinates
+    interp_daily_ds = daily_ds.interp(
+        longitude=mask.longitude, latitude=mask.latitude
+    )
+
+    # Apply the bathymetry mask to select the exact area
+    masked_data = select(interp_daily_ds, mask)
+
+    # Stack as a numpy array
+    combined_data = []
+    for var in ds_variables:
+        data = masked_data[var].values  # t, h, w
+        combined_data.append(data)
+
+    combined_data = np.stack(combined_data, axis=-1)  # t, h, w, f
+    clean_data = np.nan_to_num(combined_data, nan=0.0)
+
+    # Select only sea grid points
+    sea_data = clean_data[:, grid_mask, :]  # t, n_grid, f
+
+    filename = f"{path_prefix}/{start_date.strftime('%Y%m%d')}.npy"
+    np.save(filename, sea_data)
+    print(f"Saved forecast data to {filename}")
 
 
 def main():
@@ -383,7 +465,7 @@ def main():
         "-s",
         "--start_date",
         type=str,
-        default="1987-01-01",
+        default="2000-01-01",
         help="Start date in YYYY-MM-DD format",
     )
     parser.add_argument(
@@ -409,7 +491,7 @@ def main():
     args = parser.parse_args()
 
     if args.forecast:
-        start_date = datetime.today()
+        start_date = datetime.today() - timedelta(days=1)
         end_date = start_date + timedelta(days=9)
     else:
         start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
@@ -419,6 +501,7 @@ def main():
     path_prefix_reanalysis = "data/mediterranean/raw/reanalysis"
     path_prefix_analysis = "data/mediterranean/raw/analysis"
     path_prefix_era5 = "data/mediterranean/raw/era5"
+    path_prefix_hres = "data/mediterranean/raw/hres"
     path_prefix_forecast = "data/mediterranean/raw/forecast"
     bathymetry_mask_path = "data/mediterranean/static/bathy_mask.nc"
 
@@ -426,6 +509,7 @@ def main():
     os.makedirs(path_prefix_reanalysis, exist_ok=True)
     os.makedirs(path_prefix_analysis, exist_ok=True)
     os.makedirs(path_prefix_era5, exist_ok=True)
+    os.makedirs(path_prefix_hres, exist_ok=True)
     os.makedirs(path_prefix_forecast, exist_ok=True)
 
     mask = load_mask(bathymetry_mask_path)
@@ -516,6 +600,18 @@ def main():
             version,
             path_prefix_static,
             path_prefix_forecast,
+            mask,
+        )
+
+        request_variables = ["10u", "10v", "2t", "msl", "ssr", "tp"]
+        ds_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
+
+        download_hres_forecast(
+            start_date,
+            path_prefix_static,
+            path_prefix_hres,
+            request_variables,
+            ds_variables,
             mask,
         )
 
