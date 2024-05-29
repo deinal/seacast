@@ -148,7 +148,7 @@ def download_data(
     end_date,
     datasets,
     version,
-    path_prefix_static,
+    static_path,
     path_prefix,
     mask,
 ):
@@ -160,12 +160,12 @@ def download_data(
     end_date (datetime): The end date for data retrieval.
     datasets (dict): Datasets to download.
     version (str): Dataset version.
-    path_prefix_static (str): Location of static data.
+    static_path (str): Location of static data.
     path_prefix (str): The directory path prefix where the files will be saved.
     mask (xarray.Dataset): Bathymetry mask
     """
 
-    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+    grid_mask = np.load(f"{static_path}/sea_mask.npy")[0]
 
     current_date = start_date
     while current_date <= end_date:
@@ -225,7 +225,7 @@ def download_forecast(
     end_date,
     datasets,
     version,
-    path_prefix_static,
+    static_path,
     path_prefix,
     mask,
 ):
@@ -237,11 +237,11 @@ def download_forecast(
     end_date (datetime): The end date for data retrieval.
     datasets (dict): Datasets to download.
     version (str): Dataset version.
-    path_prefix_static (str): Location of static data.
+    static_path (str): Location of static data.
     path_prefix (str): The directory path prefix where the files will be saved.
     mask (xarray.Dataset): Bathymetry mask
     """
-    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+    grid_mask = np.load(f"{static_path}/sea_mask.npy")[0]
 
     filename = f"{path_prefix}/{start_date.strftime('%Y%m%d')}.npy"
 
@@ -290,7 +290,7 @@ def download_era5(
     end_date,
     request_variables,
     ds_variables,
-    path_prefix_static,
+    static_path,
     path_prefix,
     mask,
 ):
@@ -302,11 +302,11 @@ def download_era5(
     end_date (datetime): The end date for data retrieval.
     request_variables (list): List of variables to request from cds.
     ds_variables (list): List of variables in the dataset.
-    path_prefix_static (str): Location of static data.
+    static_path (str): Location of static data.
     path_prefix (str): The directory path prefix where the files will be saved.
     mask (xarray.Dataset): Bathymetry mask.
     """
-    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+    grid_mask = np.load(f"{static_path}/sea_mask.npy")[0]
 
     client = cdsapi.Client()
     current_date = start_date
@@ -377,7 +377,7 @@ def download_era5(
 
 def download_hres_forecast(
     start_date,
-    path_prefix_static,
+    static_path,
     path_prefix,
     request_variables,
     ds_variables,
@@ -388,13 +388,13 @@ def download_hres_forecast(
 
     Args:
     start_date (datetime): The start date for data retrieval.
-    path_prefix_static (str): Location of static data.
+    static_path (str): Location of static data.
     path_prefix (str): Path where the files will be saved.
     request_variables (list): List of variables to download.
     ds_variables (list): List of variables in the dataset.
     mask (xarray.Dataset): Bathymetry mask
     """
-    grid_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+    grid_mask = np.load(f"{static_path}/sea_mask.npy")[0]
 
     # Set up HRES client
     client = eo.Client(
@@ -462,6 +462,13 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Download oceanographic data.")
     parser.add_argument(
+        "-b",
+        "--base_path",
+        type=str,
+        default="data/mediterranean/",
+        help="Output directory",
+    )
+    parser.add_argument(
         "-s",
         "--start_date",
         type=str,
@@ -491,31 +498,32 @@ def main():
     args = parser.parse_args()
 
     if args.forecast:
-        start_date = datetime.today() - timedelta(days=1)
+        start_date = datetime.today()
         end_date = start_date + timedelta(days=9)
     else:
         start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
         end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
 
-    path_prefix_static = "data/mediterranean/static"
-    path_prefix_reanalysis = "data/mediterranean/raw/reanalysis"
-    path_prefix_analysis = "data/mediterranean/raw/analysis"
-    path_prefix_era5 = "data/mediterranean/raw/era5"
-    path_prefix_hres = "data/mediterranean/raw/hres"
-    path_prefix_forecast = "data/mediterranean/raw/forecast"
-    bathymetry_mask_path = "data/mediterranean/static/bathy_mask.nc"
+    static_path = args.base_path + "static/"
+    raw_path = args.base_path + "raw/"
+    reanalysis_path = raw_path + "reanalysis"
+    analysis_path = raw_path + "analysis"
+    era5_path = raw_path + "era5"
+    hres_path = raw_path + "hres"
+    forecast_path = raw_path + "forecast"
+    bathymetry_mask_path = static_path + "bathy_mask.nc"
 
-    os.makedirs(path_prefix_static, exist_ok=True)
-    os.makedirs(path_prefix_reanalysis, exist_ok=True)
-    os.makedirs(path_prefix_analysis, exist_ok=True)
-    os.makedirs(path_prefix_era5, exist_ok=True)
-    os.makedirs(path_prefix_hres, exist_ok=True)
-    os.makedirs(path_prefix_forecast, exist_ok=True)
+    os.makedirs(static_path, exist_ok=True)
+    os.makedirs(reanalysis_path, exist_ok=True)
+    os.makedirs(analysis_path, exist_ok=True)
+    os.makedirs(era5_path, exist_ok=True)
+    os.makedirs(hres_path, exist_ok=True)
+    os.makedirs(forecast_path, exist_ok=True)
 
     mask = load_mask(bathymetry_mask_path)
 
     if args.static:
-        download_static(path_prefix_static, mask)
+        download_static(static_path, mask)
 
     if args.data_source == "reanalysis":
         datasets = {
@@ -535,8 +543,8 @@ def main():
             end_date,
             datasets,
             version,
-            path_prefix_static,
-            path_prefix_reanalysis,
+            static_path,
+            reanalysis_path,
             mask,
         )
 
@@ -558,8 +566,8 @@ def main():
             end_date,
             datasets,
             version,
-            path_prefix_static,
-            path_prefix_analysis,
+            static_path,
+            analysis_path,
             mask,
         )
 
@@ -578,8 +586,8 @@ def main():
             end_date,
             request_variables,
             ds_variables,
-            path_prefix_static,
-            path_prefix_era5,
+            static_path,
+            era5_path,
             mask,
         )
 
@@ -598,8 +606,8 @@ def main():
             end_date,
             datasets,
             version,
-            path_prefix_static,
-            path_prefix_forecast,
+            static_path,
+            forecast_path,
             mask,
         )
 
@@ -608,8 +616,8 @@ def main():
 
         download_hres_forecast(
             start_date,
-            path_prefix_static,
-            path_prefix_hres,
+            static_path,
+            hres_path,
             request_variables,
             ds_variables,
             mask,

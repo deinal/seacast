@@ -152,10 +152,6 @@ def mk_2d_graph(xy, nx, ny, land_mask):
         if crosses_land(g.nodes[u]["pos"], g.nodes[v]["pos"], land_mask):
             g.remove_edge(u, v)
 
-    # # remove lonely nodes (nodes with no edges)
-    # lonely_nodes = [node for node in g.nodes if g.degree(node) == 0]
-    # g.remove_nodes_from(lonely_nodes)
-
     # turn into directed graph
     dg = networkx.DiGraph(g)
 
