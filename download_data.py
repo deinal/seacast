@@ -4,8 +4,10 @@ import os
 from datetime import datetime, timedelta
 
 # Third-party
+import cdsapi
 import copernicusmarine as cm
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 # First-party
@@ -20,7 +22,7 @@ def load_mask(path):
     path (str): Path to the bathymetry mask file.
 
     Returns:
-    mask (xarray.DataArray): Bathymetry mask.
+    mask (xarray.Dataset): Bathymetry mask.
     """
     if os.path.exists(path):
         print("Bathymetry mask file found. Loading from file.")
@@ -51,11 +53,11 @@ def select(dataset, mask):
     Select masked volume.
 
     Args:
-    dataset (xarray.DataArray): Input dataset.
-    mask (xarray.DataArray): Bathymetry mask.
+    dataset (xarray.Dataset): Input dataset.
+    mask (xarray.Dataset): Bathymetry mask.
 
     Returns:
-    mask (xarray.DataArray): Masked dataset.
+    mask (xarray.Dataset): Masked dataset.
     """
     # Fix longitude mismatches close to zero
     dataset["longitude"] = dataset.longitude.where(
@@ -81,7 +83,7 @@ def download_static(path_prefix, mask):
 
     Args:
     path_prefix (str): Path to store.
-    mask (xarray.DataArray): Bathymetry mask.
+    mask (xarray.Dataset): Bathymetry mask.
     """
     # Download ocean depth and mask
     bathy_data = cm.open_dataset(
@@ -159,7 +161,7 @@ def download_data(
     version (str): Dataset version.
     path_prefix_static (str): Location of static data.
     path_prefix (str): The directory path prefix where the files will be saved.
-    mask (xarray.DataArray): Bathymetry mask
+    mask (xarray.Dataset): Bathymetry mask
     """
 
     np_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
@@ -236,7 +238,7 @@ def download_forecast(
     version (str): Dataset version.
     path_prefix_static (str): Location of static data.
     path_prefix (str): The directory path prefix where the files will be saved.
-    mask (xarray.DataArray): Bathymetry mask
+    mask (xarray.Dataset): Bathymetry mask
     """
     np_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
 
@@ -282,6 +284,96 @@ def download_forecast(
     print(f"Saved forecast data to {filename}")
 
 
+def download_era5(
+    start_date,
+    end_date,
+    request_variables,
+    ds_variables,
+    path_prefix_static,
+    path_prefix,
+    mask,
+):
+    """
+    Download and save daily ERA5 data.
+
+    Args:
+    start_date (datetime): The start date for data retrieval.
+    end_date (datetime): The end date for data retrieval.
+    request_variables (list): List of variables to request from cds.
+    ds_variables (list): List of variables in the dataset.
+    path_prefix_static (str): Location of static data.
+    path_prefix (str): The directory path prefix where the files will be saved.
+    mask (xarray.Dataset): Bathymetry mask.
+    """
+    np_mask = np.load(f"{path_prefix_static}/sea_mask.npy")[0]
+
+    c = cdsapi.Client()
+    current_date = start_date
+    while current_date <= end_date:
+        year = current_date.year
+        month = current_date.strftime("%m")
+
+        filename = f"{path_prefix}/{current_date.strftime('%Y%m')}.nc"
+        if os.path.isfile(filename):
+            continue
+
+        c.retrieve(
+            "reanalysis-era5-single-levels",
+            {
+                "format": "netcdf",
+                "product_type": "reanalysis",
+                "variable": request_variables,
+                "year": str(year),
+                "month": month,
+                "day": list(range(1, 32)),
+                "time": [f"{hour:02d}:00" for hour in range(24)],
+                "area": [
+                    mask.latitude.max().item(),
+                    mask.longitude.min().item(),
+                    mask.latitude.min().item(),
+                    mask.longitude.max().item(),
+                ],
+            },
+            filename,
+        )
+        print(f"Downloaded {filename}")
+
+        # Load the data and average to daily
+        ds = xr.open_dataset(filename)
+        daily_ds = ds.resample(time="1D").mean()
+
+        # Interpolate to the bathymetry mask grid
+        interp_daily_ds = daily_ds.interp(
+            longitude=mask.longitude, latitude=mask.latitude
+        )
+
+        # Apply the bathymetry mask to select the exact area
+        masked_data = select(interp_daily_ds, mask)
+
+        # Save in numpy format with shape (n_grid, f)
+        for single_date in masked_data.time.values:
+            date_str = pd.to_datetime(single_date).strftime("%Y%m%d")
+            daily_data = masked_data.sel(time=single_date)
+            combined_data = []
+            for var in ds_variables:
+                data = daily_data[var].values  # h, w
+                combined_data.append(data)
+
+            combined_data = np.stack(combined_data, axis=-1)  # h, w, f
+            clean_data = np.nan_to_num(combined_data, nan=0.0)
+
+            np.save(
+                f"{path_prefix}/{date_str}.npy", clean_data[np_mask, :]
+            )  # n_grid, f
+            print(f"Saved daily data to {path_prefix}/{date_str}.npy")
+
+        # Increment to the next month
+        if month == "12":
+            current_date = current_date.replace(year=year + 1, month=1, day=1)
+        else:
+            current_date = current_date.replace(month=int(month) + 1, day=1)
+
+
 def main():
     """
     Main function to organize the download and processing of oceanographic data.
@@ -298,15 +390,15 @@ def main():
         "-e",
         "--end_date",
         type=str,
-        default="2022-07-31",
+        default="2024-05-25",
         help="End date in YYYY-MM-DD format",
     )
     parser.add_argument(
         "-d",
         "--data_source",
         type=str,
-        choices=["analysis", "reanalysis"],
-        help="Choose between analysis or reanalysis",
+        choices=["analysis", "reanalysis", "era5"],
+        help="Choose between analysis, reanalysis or era5",
     )
     parser.add_argument(
         "--static", action="store_true", help="Download static data"
@@ -326,12 +418,14 @@ def main():
     path_prefix_static = "data/mediterranean/static"
     path_prefix_reanalysis = "data/mediterranean/raw/reanalysis"
     path_prefix_analysis = "data/mediterranean/raw/analysis"
+    path_prefix_era5 = "data/mediterranean/raw/era5"
     path_prefix_forecast = "data/mediterranean/raw/forecast"
     bathymetry_mask_path = "data/mediterranean/static/bathy_mask.nc"
 
     os.makedirs(path_prefix_static, exist_ok=True)
     os.makedirs(path_prefix_reanalysis, exist_ok=True)
     os.makedirs(path_prefix_analysis, exist_ok=True)
+    os.makedirs(path_prefix_era5, exist_ok=True)
     os.makedirs(path_prefix_forecast, exist_ok=True)
 
     mask = load_mask(bathymetry_mask_path)
@@ -382,6 +476,26 @@ def main():
             version,
             path_prefix_static,
             path_prefix_analysis,
+            mask,
+        )
+
+    if args.data_source == "era5":
+        request_variables = [
+            "10m_u_component_of_wind",
+            "10m_v_component_of_wind",
+            "2m_temperature",
+            "mean_sea_level_pressure",
+            "surface_net_solar_radiation",
+            "total_precipitation",
+        ]
+        ds_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
+        download_era5(
+            start_date,
+            end_date,
+            request_variables,
+            ds_variables,
+            path_prefix_static,
+            path_prefix_era5,
             mask,
         )
 
