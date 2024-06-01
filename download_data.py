@@ -413,14 +413,6 @@ def download_cerra(
         month = current_date.strftime("%m")
 
         filename = f"{path_prefix}/{current_date.strftime('%Y%m')}.grib"
-        if os.path.isfile(filename):
-            if month == "12":
-                current_date = current_date.replace(
-                    year=year + 1, month=1, day=1
-                )
-            else:
-                current_date = current_date.replace(month=int(month) + 1, day=1)
-            continue
 
         client.retrieve(
             "reanalysis-cerra-single-levels",
@@ -428,12 +420,22 @@ def download_cerra(
                 "format": "grib",
                 "data_type": "reanalysis",
                 "level_type": "surface_or_atmosphere",
-                "product_type": "analysis",
+                "product_type": "forecast",
                 "variable": request_variables,
                 "year": year,
                 "month": month,
                 "day": list(range(1, 32)),
-                "time": [f"{hour:02d}:00" for hour in range(0, 24, 3)],
+                "time": "00:00",
+                "leadtime_hour": [
+                    "1",
+                    "3",
+                    "6",
+                    "9",
+                    "12",
+                    "15",
+                    "18",
+                    "21",
+                ],
             },
             filename,
         )
@@ -450,40 +452,84 @@ def download_cerra(
         ds["v10"] = -ds.si10 * np.cos(np.deg2rad(ds.wdir10))
         ds = ds.drop_vars(["si10", "wdir10"])
 
-        # Aggregate to daily cadence
-        daily_ds = ds.resample(time="1D").mean()
+        # Average lead times for each day
+        daily_ds = ds.resample(step="1D").mean()
 
-        # Interpolate to bathymetry mask
+        dims = daily_ds["longitude"].dims
+        new_longitudes = np.where(
+            daily_ds["longitude"] > 180,
+            daily_ds["longitude"] - 360,
+            daily_ds["longitude"],
+        )
+        daily_ds = daily_ds.assign_coords(longitude=(dims, new_longitudes))
+
+        # Apply geographic filtering
+        min_lon, max_lon = mask.longitude.min() - 1, mask.longitude.max() + 1
+        min_lat, max_lat = mask.latitude.min() - 1, mask.latitude.max() + 1
+        daily_ds = daily_ds.where(
+            (daily_ds.longitude >= min_lon)
+            & (daily_ds.longitude <= max_lon)
+            & (daily_ds.latitude >= min_lat)
+            & (daily_ds.latitude <= max_lat),
+            drop=True,
+        )
+
+        # Set up the target grid
         target_lon, target_lat = np.meshgrid(mask.longitude, mask.latitude)
+        target_points = np.vstack((target_lon.ravel(), target_lat.ravel())).T
 
         interp_dataset = xr.Dataset()
+        all_variable_data = []
+        variable_names = list(daily_ds.data_vars)
+
+        # Collect flattened data for all variables across all time steps
         for var_name, da in daily_ds.data_vars.items():
-            interpolated_time_series = []
-            for time_idx in range(len(daily_ds.time)):
-                lat_flat = daily_ds.latitude.values.flatten()
-                lon_flat = daily_ds.longitude.values.flatten()
-                variable_flat = da.isel(time=time_idx).values.flatten()
+            all_variable_data.append(da.values.reshape(len(daily_ds.time), -1))
 
-                # Interpolate using griddata
-                interp_values = scipy.interpolate.griddata(
-                    (lon_flat, lat_flat),
-                    variable_flat,
-                    (target_lon, target_lat),
-                    method="nearest",  # linear is slow
-                )
+        # Convert list to an array (time, npoints, nvars)
+        all_variable_data = np.stack(all_variable_data, axis=-1)
 
-                interp_da = xr.DataArray(
-                    interp_values,
-                    coords=[mask.latitude, mask.longitude],
-                    dims=["latitude", "longitude"],
-                )
-
-                interpolated_time_series.append(interp_da)
-
-            # Combine all time steps into a single Dataset
-            interp_dataset[var_name] = xr.concat(
-                interpolated_time_series, dim=daily_ds.time
+        # Prepare the structure in interp_dataset for each variable
+        for var_name in variable_names:
+            interp_dataset[var_name] = xr.DataArray(
+                np.empty(
+                    (
+                        len(daily_ds.time),
+                        len(mask.latitude),
+                        len(mask.longitude),
+                    )
+                ),
+                coords={
+                    "time": daily_ds.time,
+                    "latitude": mask.latitude,
+                    "longitude": mask.longitude,
+                },
+                dims=["time", "latitude", "longitude"],
             )
+
+        # Interpolate each time step
+        for time_idx in range(len(daily_ds.time)):
+            lat_flat = daily_ds.latitude.values.flatten()
+            lon_flat = daily_ds.longitude.values.flatten()
+            coords = np.vstack((lon_flat, lat_flat)).T
+
+            # Variables flattened for the current time step
+            variable_flat = all_variable_data[
+                time_idx, :, :
+            ]  # (npoints, nvars)
+
+            # Interpolate timestep
+            interp = scipy.interpolate.LinearNDInterpolator(
+                coords, variable_flat
+            )
+            interp_values = interp(target_points)  # (npoints, nvars)
+
+            # Reshape interpolated values back to grid and assign to dataset
+            for var_idx, var_name in enumerate(variable_names):
+                interp_values_var = interp_values[:, var_idx].reshape(
+                    target_lon.shape
+                )
+                interp_dataset[var_name][time_idx] = interp_values_var
 
         masked_data = select(interp_dataset, mask)
 
@@ -715,8 +761,10 @@ def main():
             "10m_wind_speed",
             "2m_temperature",
             "mean_sea_level_pressure",
+            "surface_net_solar_radiation",
+            "total_precipitation",
         ]
-        ds_variables = ["u10", "v10", "t2m", "msl"]
+        ds_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
         download_cerra(
             start_date,
             end_date,
