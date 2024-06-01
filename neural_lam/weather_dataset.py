@@ -20,7 +20,8 @@ class WeatherDataset(torch.utils.data.Dataset):
     dim_y = 763
     N_grid = 147134
     d_features = 75
-    d_forcing = 2
+    d_atm = 6
+    d_forcing = 8
     """
 
     def __init__(
@@ -28,7 +29,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         dataset_name,
         pred_length=5,
         split="train",
-        subsample_step=5,
+        subsample_step=1,
         standardize=True,
         subset=False,
         control_only=False,
@@ -40,7 +41,7 @@ class WeatherDataset(torch.utils.data.Dataset):
             "data", dataset_name, "samples", split
         )
 
-        member_file_regexp = "AN_*.npy" if control_only else "*.npy"
+        member_file_regexp = "ana_data_*.npy" if control_only else "*_data_*.npy"
         sample_paths = glob.glob(
             os.path.join(self.sample_dir_path, member_file_regexp)
         )
@@ -65,9 +66,11 @@ class WeatherDataset(torch.utils.data.Dataset):
         self.standardize = standardize
         if standardize:
             ds_stats = utils.load_dataset_stats(dataset_name, "cpu")
-            self.data_mean, self.data_std = (
+            self.data_mean, self.data_std, self.forcing_mean, self.forcing_std = (
                 ds_stats["data_mean"],
                 ds_stats["data_std"],
+                ds_stats["forcing_mean"],
+                ds_stats["forcing_std"],
             )
 
         # If subsample index should be sampled (only duing training)
@@ -115,7 +118,22 @@ class WeatherDataset(torch.utils.data.Dataset):
         target_states = sample[2:]  # (sample_length-2, N_grid, d_features)
 
         # === Forcing features ===
-        sample_datetime = sample_name[3:]
+        sample_datetime = sample_name[9:]
+
+        forcing_path = os.path.join(
+            self.sample_dir_path,
+            f"forcing_{sample_datetime}.npy",
+        )
+        atm_forcing = torch.tensor(np.load(forcing_path), dtype=torch.float32)  # (N_t', N_grid, d_atm)
+
+        if self.standardize:
+            atm_forcing = (atm_forcing - self.forcing_mean) / self.forcing_std
+
+        # Flatten and subsample atmospheric forcing
+        atm_forcing = atm_forcing[subsample_index :: self.subsample_step]  # (N_t, N_grid, d_atm)
+        atm_forcing = atm_forcing[
+            init_id : (init_id + self.sample_length)
+        ]  # (sample_len, N_grid, 1)
 
         # Time of day and year
         dt_obj = dt.datetime.strptime(sample_datetime, "%Y%m%d")
@@ -148,11 +166,13 @@ class WeatherDataset(torch.utils.data.Dataset):
         )  # (N_t, 2)
         datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
         datetime_forcing = datetime_forcing.unsqueeze(1).expand(
-            -1, sample.shape[1], -1
+            -1, atm_forcing.shape[1], -1
         )  # (sample_len, N_grid, 2)
 
         # Put forcing features together
-        forcing_features = datetime_forcing  # (sample_len, N_grid, d_forcing)
+        forcing_features = torch.cat(
+            (atm_forcing, datetime_forcing), dim=-1
+        )  # (sample_len, N_grid, d_forcing)
 
         # Combine forcing over each window of 3 time steps
         forcing_windowed = torch.cat(

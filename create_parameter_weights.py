@@ -68,7 +68,9 @@ def main():
     print("Computing mean and std.-dev. for parameters...")
     means = []
     squares = []
-    for init_batch, target_batch, _ in tqdm(loader):
+    forcing_means = []
+    forcing_squares = []
+    for init_batch, target_batch, forcing_batch in tqdm(loader):
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
@@ -77,13 +79,24 @@ def main():
             torch.mean(batch**2, dim=(1, 2))
         )  # (N_batch, d_features,)
 
+        # Atmospheric forcing at 1st windowed position
+        forcing_batch = forcing_batch[:, :, :, :6]
+        forcing_means.append(torch.mean(forcing_batch))  # (,)
+        forcing_squares.append(torch.mean(forcing_batch**2))  # (,)
+
     mean = torch.mean(torch.cat(means, dim=0), dim=0)  # (d_features)
     second_moment = torch.mean(torch.cat(squares, dim=0), dim=0)
     std = torch.sqrt(second_moment - mean**2)  # (d_features)
 
+    forcing_mean = torch.mean(torch.stack(forcing_means))  # (,)
+    forcing_second_moment = torch.mean(torch.stack(forcing_squares))  # (,)
+    forcing_std = torch.sqrt(forcing_second_moment - forcing_mean**2)  # (,)
+    forcing_stats = torch.stack((forcing_mean, forcing_std))
+
     print("Saving mean, std.-dev...")
     torch.save(mean, os.path.join(static_dir_path, "parameter_mean.pt"))
     torch.save(std, os.path.join(static_dir_path, "parameter_std.pt"))
+    torch.save(forcing_stats, os.path.join(static_dir_path, "forcing_stats.pt"))
 
     # Compute mean and std.-dev. of one-step differences across the dataset
     print("Computing mean and std.-dev. for one-step differences...")

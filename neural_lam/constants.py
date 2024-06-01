@@ -78,7 +78,7 @@ GRID_LIMITS = [-6, 36.291668, 30.1875, 45.979168]
 PROJECTION = cartopy.crs.PlateCarree()
 
 # Data dimensions
-GRID_FORCING_DIM = 2 * 3  # 2 feat. for 3 time-step window + 0 batch-static
+GRID_FORCING_DIM = 8 * 3  # 2 feat. for 3 time-step window + 0 batch-static
 GRID_STATE_DIM = 75
 
 DEPTHS = [

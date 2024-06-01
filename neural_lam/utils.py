@@ -25,9 +25,14 @@ def load_dataset_stats(dataset_name, device="cpu"):
     data_mean = loads_file("parameter_mean.pt")  # (d_features,)
     data_std = loads_file("parameter_std.pt")  # (d_features,)
 
+    forcing_stats = loads_file("forcing_stats.pt")  # (6,)
+    forcing_mean, forcing_std = forcing_stats
+
     return {
         "data_mean": data_mean,
         "data_std": data_std,
+        "forcing_mean": forcing_mean,
+        "forcing_std": forcing_std,
     }
 
 

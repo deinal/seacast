@@ -78,7 +78,7 @@ def main():
         "-p",
         "--prefix",
         type=str,
-        required="RE",
+        required="ana_data",
         help="Prefix for the output files",
     )
     args = parser.parse_args()
