@@ -1,5 +1,6 @@
 # Standard library
 import argparse
+import calendar
 import os
 from datetime import datetime, timedelta
 
@@ -171,55 +172,62 @@ def download_data(
 
     current_date = start_date
     while current_date <= end_date:
-        date_str = current_date.strftime("%Y-%m-%dT00:00:00")
-        filename = f"{path_prefix}/{current_date.strftime('%Y%m%d')}.npy"
+        # Calculate the first and last day of the current month
+        first_day = current_date.replace(day=1)
+        last_day = current_date.replace(
+            day=calendar.monthrange(current_date.year, current_date.month)[1]
+        )
 
-        if os.path.isfile(filename):
-            current_date += timedelta(days=1)
-            continue
+        # Format the start and end datetime strings for the month
+        start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
+        end_datetime = last_day.strftime("%Y-%m-%dT00:00:00")
 
-        all_data = []
-
+        # Request data for the whole month
+        month_data = {}
         for dataset_id, variables in datasets.items():
-
-            # Load ocean physics dataset
-            dataset = cm.open_dataset(
+            ds = cm.open_dataset(
                 dataset_id=dataset_id,
                 dataset_version=version,
                 dataset_part="default",
                 service="arco-geo-series",
                 variables=variables,
-                start_datetime=date_str,
-                end_datetime=date_str,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
                 minimum_depth=constants.DEPTHS[0],
                 maximum_depth=constants.DEPTHS[-1],
             )
+            month_data[dataset_id] = select(ds, mask)
+            ds.close()
 
-            dataset = select(dataset, mask)
-            for var in variables:
-                data = dataset[var].isel(time=0).values
-                if var == "bottomT":
-                    data = data[:, :, 0]
-                if len(data.shape) == 2:
-                    data = data[np.newaxis, ...]
-                data = data.transpose(1, 2, 0)  # h, w, f
-                all_data.append(data)
+        # Process and save daily data
+        for day in range((last_day - first_day).days + 1):
+            day_date = first_day + timedelta(days=day)
+            filename = f"{path_prefix}/{day_date.strftime('%Y%m%d')}.npy"
+            all_data = []
+            for dataset_id in datasets:
+                dataset = month_data[dataset_id]
+                for var in datasets[dataset_id]:
+                    daily_data = dataset[var].isel(time=day).values
+                    if var == "bottomT":
+                        daily_data = daily_data[:, :, 0]
+                    if len(daily_data.shape) == 2:
+                        daily_data = daily_data[np.newaxis, ...]
+                    daily_data = daily_data.transpose(1, 2, 0)  # h, w, f
+                    all_data.append(daily_data)
 
-            dataset.close()
+            # Concatenate all data along a new axis
+            combined_data = np.concatenate(all_data, axis=-1)
+            clean_data = np.nan_to_num(combined_data, nan=0.0)
 
-        # Concatenate all data along a new axis
-        combined_data = np.concatenate(all_data, axis=-1)
-        clean_data = np.nan_to_num(combined_data, nan=0.0)
+            # Select only sea grid points
+            sea_data = clean_data[grid_mask, :]  # n_grid, f
 
-        # Select only sea grid points
-        sea_data = clean_data[grid_mask, :]  # n_grid, f
+            # Save combined data as one numpy file
+            np.save(filename, sea_data)
+            print(f"Saved data to {filename}")
 
-        # Save combined data as one numpy file
-        np.save(filename, sea_data)
-        print(filename)
-
-        # Next day
-        current_date += timedelta(days=1)
+        # Increment the next month
+        current_date = last_day + timedelta(days=1)
 
 
 def download_forecast(
@@ -270,7 +278,6 @@ def download_forecast(
             if len(data.shape) == 3:
                 data = data[:, np.newaxis, ...]  # t, 1, h, w
             data = data.transpose(0, 2, 3, 1)  # t, h, w, f
-            print(var, data.shape)
             all_data.append(data)
 
         dataset.close()
@@ -314,16 +321,16 @@ def download_era5(
     current_date = start_date
     while current_date <= end_date:
         year = current_date.year
-        month = current_date.strftime("%m")
+        month = current_date.month
 
         filename = f"{path_prefix}/{current_date.strftime('%Y%m')}.nc"
         if os.path.isfile(filename):
-            if month == "12":
+            if month == 7:
                 current_date = current_date.replace(
                     year=year + 1, month=1, day=1
                 )
             else:
-                current_date = current_date.replace(month=int(month) + 1, day=1)
+                current_date = current_date.replace(month=month + 6, day=1)
             continue
 
         client.retrieve(
@@ -333,9 +340,9 @@ def download_era5(
                 "product_type": "reanalysis",
                 "variable": request_variables,
                 "year": str(year),
-                "month": month,
-                "day": list(range(1, 32)),
-                "time": [f"{hour:02d}:00" for hour in range(24)],
+                "month": [f"{m:02d}" for m in range(month, month + 6)],
+                "day": [f"{d:02d}" for d in range(1, 32)],
+                "time": [f"{h:02d}:00" for h in range(0, 24, 3)],
                 "area": [
                     mask.latitude.max().item(),
                     mask.longitude.min().item(),
@@ -377,10 +384,10 @@ def download_era5(
             print(f"Saved daily data to {path_prefix}/{date_str}.npy")
 
         # Increment to the next month
-        if month == "12":
+        if month == 7:
             current_date = current_date.replace(year=year + 1, month=1, day=1)
         else:
-            current_date = current_date.replace(month=int(month) + 1, day=1)
+            current_date = current_date.replace(month=month + 6, day=1)
 
 
 def download_cerra(
@@ -559,6 +566,7 @@ def download_cerra(
 
 def download_hres_forecast(
     start_date,
+    start_time,
     static_path,
     path_prefix,
     request_variables,
@@ -570,6 +578,7 @@ def download_hres_forecast(
 
     Args:
     start_date (datetime): The start date for data retrieval.
+    start_time (int): The start time for data retrieval.
     static_path (str): Location of static data.
     path_prefix (str): Path where the files will be saved.
     request_variables (list): List of variables to download.
@@ -590,10 +599,11 @@ def download_hres_forecast(
     # Retrieve data
     client.retrieve(
         date=start_date.strftime("%Y-%m-%d"),
-        time=0,
+        time=start_time,
         type="fc",
         stream="oper",
-        step=list(range(0, 240, 6)),  # 240 hours = 10 days
+        step=list(range(0, 144, 3))
+        + list(range(144, 241, 6)),  # 240 hours = 10 days
         param=request_variables,
         target=grib_filename,
     )
@@ -692,7 +702,8 @@ def main():
     analysis_path = raw_path + "analysis"
     cerra_path = raw_path + "cerra"
     era5_path = raw_path + "era5"
-    hres_path = raw_path + "hres"
+    hres00z_path = raw_path + "hres_00z"
+    hres12z_path = raw_path + "hres_12z"
     forecast_path = raw_path + "forecast"
     bathymetry_mask_path = static_path + "bathy_mask.nc"
 
@@ -701,7 +712,8 @@ def main():
     os.makedirs(analysis_path, exist_ok=True)
     os.makedirs(cerra_path, exist_ok=True)
     os.makedirs(era5_path, exist_ok=True)
-    os.makedirs(hres_path, exist_ok=True)
+    os.makedirs(hres00z_path, exist_ok=True)
+    os.makedirs(hres12z_path, exist_ok=True)
     os.makedirs(forecast_path, exist_ok=True)
 
     mask = load_mask(bathymetry_mask_path)
@@ -818,14 +830,16 @@ def main():
         request_variables = ["10u", "10v", "2t", "msl", "ssr", "tp"]
         ds_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
 
-        download_hres_forecast(
-            start_date,
-            static_path,
-            hres_path,
-            request_variables,
-            ds_variables,
-            mask,
-        )
+        for start_time, hres_path in zip([0, 12], [hres00z_path, hres12z_path]):
+            download_hres_forecast(
+                start_date,
+                start_time,
+                static_path,
+                hres_path,
+                request_variables,
+                ds_variables,
+                mask,
+            )
 
 
 if __name__ == "__main__":
