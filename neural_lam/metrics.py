@@ -27,7 +27,7 @@ def mask_and_reduce_metric(
     (...,) is any number of batch dimensions, potentially different
         but broadcastable
     metric_entry_vals: (..., N, d_state), prediction
-    mask: (N,), boolean mask describing which grid nodes to use in metric
+    mask: (..., N, d_state), mask describing which grid nodes to use in metric
     grid_weights: (N, 1), weights for each grid point
     average_grid: boolean, if grid dimension -2 should be reduced (mean over N)
     sum_vars: boolean, if variable dimension -1 should be reduced (sum
@@ -38,18 +38,15 @@ def mask_and_reduce_metric(
     depending on reduction arguments.
     """
 
-    # Only keep grid nodes in mask
-    if mask is not None:
-        metric_entry_vals = metric_entry_vals[..., mask]  # (..., N', d_state)
-
     if grid_weights is not None:
         metric_entry_vals = metric_entry_vals * grid_weights
 
     # Optionally reduce last two dimensions
     if average_grid:  # Reduce grid first
-        metric_entry_vals = torch.mean(
-            metric_entry_vals, dim=-2
-        )  # (..., d_state)
+        metric_entry_vals = torch.sum(
+            mask * metric_entry_vals, dim=-2
+        ) / torch.sum(mask, dim=-2)
+        # (..., d_state)
     if sum_vars:  # Reduce vars second
         metric_entry_vals = torch.sum(
             metric_entry_vals, dim=-1
@@ -75,7 +72,7 @@ def wmse(
     pred: (..., N, d_state), prediction
     target: (..., N, d_state), target
     pred_std: (..., N, d_state) or (d_state,), predicted std.-dev.
-    mask: (N,), boolean mask describing which grid nodes to use in metric
+    mask: (..., N, d_state), mask describing which grid nodes to use in metric
     grid_weights: (N, 1), weights for each grid point
     average_grid: boolean, if grid dimension -2 should be reduced (mean over N)
     sum_vars: boolean, if variable dimension -1 should be reduced (sum
@@ -116,7 +113,7 @@ def mse(
     pred: (..., N, d_state), prediction
     target: (..., N, d_state), target
     pred_std: (..., N, d_state) or (d_state,), predicted std.-dev.
-    mask: (N,), boolean mask describing which grid nodes to use in metric
+    mask: (..., N, d_state), mask describing which grid nodes to use in metric
     grid_weights: (N, 1), weights for each grid point
     average_grid: boolean, if grid dimension -2 should be reduced (mean over N)
     sum_vars: boolean, if variable dimension -1 should be reduced (sum
@@ -155,7 +152,7 @@ def wmae(
     pred: (..., N, d_state), prediction
     target: (..., N, d_state), target
     pred_std: (..., N, d_state) or (d_state,), predicted std.-dev.
-    mask: (N,), boolean mask describing which grid nodes to use in metric
+    mask: (..., N, d_state), mask describing which grid nodes to use in metric
     grid_weights: (N, 1), weights for each grid point
     average_grid: boolean, if grid dimension -2 should be reduced (mean over N)
     sum_vars: boolean, if variable dimension -1 should be reduced (sum
@@ -196,7 +193,7 @@ def mae(
     pred: (..., N, d_state), prediction
     target: (..., N, d_state), target
     pred_std: (..., N, d_state) or (d_state,), predicted std.-dev.
-    mask: (N,), boolean mask describing which grid nodes to use in metric
+    mask: (..., N, d_state), mask describing which grid nodes to use in metric
     grid_weights: (N, 1), weights for each grid point
     average_grid: boolean, if grid dimension -2 should be reduced (mean over N)
     sum_vars: boolean, if variable dimension -1 should be reduced (sum
@@ -235,7 +232,7 @@ def nll(
     pred: (..., N, d_state), prediction
     target: (..., N, d_state), target
     pred_std: (..., N, d_state) or (d_state,), predicted std.-dev.
-    mask: (N,), boolean mask describing which grid nodes to use in metric
+    mask: (..., N, d_state), mask describing which grid nodes to use in metric
     grid_weights: (N, 1), weights for each grid point
     average_grid: boolean, if grid dimension -2 should be reduced (mean over N)
     sum_vars: boolean, if variable dimension -1 should be reduced (sum
@@ -276,7 +273,7 @@ def crps_gauss(
     pred: (..., N, d_state), prediction
     target: (..., N, d_state), target
     pred_std: (..., N, d_state) or (d_state,), predicted std.-dev.
-    mask: (N,), boolean mask describing which grid nodes to use in metric
+    mask: (..., N, d_state), mask describing which grid nodes to use in metric
     grid_weights: (N, 1), weights for each grid point
     average_grid: boolean, if grid dimension -2 should be reduced (mean over N)
     sum_vars: boolean, if variable dimension -1 should be reduced (sum

@@ -8,7 +8,7 @@ import torch
 from tqdm import tqdm
 
 # First-party
-from neural_lam import constants
+from neural_lam import constants, utils
 from neural_lam.weather_dataset import WeatherDataset
 
 
@@ -45,6 +45,10 @@ def main():
 
     static_dir_path = os.path.join("data", args.dataset, "static")
 
+    expanded_mask = utils.load_mask(args.dataset)["interior_mask"].unsqueeze(
+        0
+    )  # 1, 1, N_grid, d_features
+
     w_list = np.ones(len(constants.EXP_PARAM_NAMES_SHORT))
     print("Saving parameter weights...")
     np.save(
@@ -74,9 +78,15 @@ def main():
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
-        means.append(torch.mean(batch, dim=(1, 2)))  # (N_batch, d_features,)
+        masked_mean = torch.sum(expanded_mask * batch, dim=2) / torch.sum(
+            expanded_mask, dim=2
+        )  # (N_batch, N_t, d_features)
+        masked_squares = torch.sum(expanded_mask * batch**2, dim=2) / torch.sum(
+            expanded_mask, dim=2
+        )  # (N_batch, N_t, d_features)
+        means.append(torch.mean(masked_mean, dim=1))  # (N_batch, d_features,)
         squares.append(
-            torch.mean(batch**2, dim=(1, 2))
+            torch.mean(masked_squares, dim=1)
         )  # (N_batch, d_features,)
 
         # Atmospheric forcing at 1st windowed position
@@ -131,12 +141,21 @@ def main():
 
         batch_diffs = stepped_batch[:, 1:] - stepped_batch[:, :-1]
         # (N_batch', N_t-1, N_grid, d_features)
-
+        masked_diff_mean = torch.sum(
+            expanded_mask * batch_diffs, dim=2
+        ) / torch.sum(
+            expanded_mask, dim=2
+        )  # (N_batch', N_t-1, d_features)
+        masked_diff_squares = torch.sum(
+            expanded_mask * batch_diffs**2, dim=2
+        ) / torch.sum(
+            expanded_mask, dim=2
+        )  # (N_batch', N_t-1, d_features)
         diff_means.append(
-            torch.mean(batch_diffs, dim=(1, 2))
+            torch.mean(masked_diff_mean, dim=1)
         )  # (N_batch', d_features,)
         diff_squares.append(
-            torch.mean(batch_diffs**2, dim=(1, 2))
+            torch.mean(masked_diff_squares, dim=1)
         )  # (N_batch', d_features,)
 
     diff_mean = torch.mean(torch.cat(diff_means, dim=0), dim=0)  # (d_features)

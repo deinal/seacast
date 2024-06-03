@@ -103,6 +103,13 @@ class ARModel(pl.LightningModule):
         """
         return self.interior_mask[0].to(torch.bool)
 
+    @property
+    def expanded_mask(self):
+        """
+        Expand the interior mask as (1, 1, N_grid, d_features).
+        """
+        return self.interior_mask.unsqueeze(0)
+
     @staticmethod
     def expand_to_batch(x, batch_size):
         """
@@ -140,7 +147,7 @@ class ARModel(pl.LightningModule):
             # state: (B, num_grid_nodes, d_f)
             # pred_std: (B, num_grid_nodes, d_f) or None
 
-            # Overwrite border with true state
+            # Apply bathymetry mask
             new_state = self.interior_mask * pred_state
 
             prediction_list.append(new_state)
@@ -195,7 +202,11 @@ class ARModel(pl.LightningModule):
         # Compute loss
         batch_loss = torch.mean(
             self.loss(
-                prediction, target, pred_std, grid_weights=self.grid_weights
+                prediction,
+                target,
+                pred_std,
+                mask=self.expanded_mask,
+                grid_weights=self.grid_weights,
             )
         )  # mean over unrolled times and batch
 
@@ -226,7 +237,11 @@ class ARModel(pl.LightningModule):
 
         time_step_loss = torch.mean(
             self.loss(
-                prediction, target, pred_std, grid_weights=self.grid_weights
+                prediction,
+                target,
+                pred_std,
+                mask=self.expanded_mask,
+                grid_weights=self.grid_weights,
             ),
             dim=0,
         )  # (time_steps-1)
@@ -247,6 +262,7 @@ class ARModel(pl.LightningModule):
             prediction,
             target,
             pred_std,
+            mask=self.expanded_mask,
             sum_vars=False,
         )  # (B, pred_steps, d_f)
         self.val_metrics["mse"].append(entry_mses)
@@ -273,7 +289,11 @@ class ARModel(pl.LightningModule):
 
         time_step_loss = torch.mean(
             self.loss(
-                prediction, target, pred_std, grid_weights=self.grid_weights
+                prediction,
+                target,
+                pred_std,
+                mask=self.expanded_mask,
+                grid_weights=self.grid_weights,
             ),
             dim=0,
         )  # (time_steps-1,)
@@ -300,6 +320,7 @@ class ARModel(pl.LightningModule):
                 prediction,
                 target,
                 pred_std,
+                mask=self.expanded_mask,
                 grid_weights=self.grid_weights,
                 sum_vars=False,
             )  # (B, pred_steps, d_f)

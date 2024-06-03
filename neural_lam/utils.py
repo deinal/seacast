@@ -25,7 +25,7 @@ def load_dataset_stats(dataset_name, device="cpu"):
     data_mean = loads_file("parameter_mean.pt")  # (d_features,)
     data_std = loads_file("parameter_std.pt")  # (d_features,)
 
-    forcing_stats = loads_file("forcing_stats.pt")  # (6,)
+    forcing_stats = loads_file("forcing_stats.pt")  # (d_atm,)
     forcing_mean, forcing_std = forcing_stats
 
     return {
@@ -34,6 +34,39 @@ def load_dataset_stats(dataset_name, device="cpu"):
         "forcing_mean": forcing_mean,
         "forcing_std": forcing_std,
     }
+
+
+def load_mask(dataset_name, device="cpu"):
+    """
+    Load interior mask for dataset
+    """
+    static_dir_path = os.path.join("data", dataset_name, "static")
+
+    # Load sea mask, 1. if node is part of the sea, else 0.
+    sea_mask_np = np.load(
+        os.path.join(static_dir_path, "sea_mask.npy")
+    )  # (depths, h, w)
+
+    # Mask for the surface grid
+    surface_mask_np = sea_mask_np[0]
+
+    # Grid mask for all depth levels to be multiplied with output states
+    grid_mask = torch.tensor(
+        sea_mask_np[:, surface_mask_np],
+        dtype=torch.float32,
+        device=device,
+    )  # (depths, N_grid)
+    interior_mask = []
+    for level_applies in constants.LEVELS:
+        if level_applies:
+            interior_mask.append(grid_mask)  # Multi level
+        else:
+            interior_mask.append(grid_mask[0].unsqueeze(0))  # Single level
+    interior_mask = (
+        torch.cat(interior_mask, dim=0).transpose(0, 1).unsqueeze(0)
+    )  # 1, N_grid, d_features
+
+    return {"interior_mask": interior_mask}
 
 
 def load_static_data(dataset_name, device="cpu"):
@@ -47,7 +80,7 @@ def load_static_data(dataset_name, device="cpu"):
             os.path.join(static_dir_path, fn), map_location=device
         )
 
-    # Load border mask, 1. if node is part of border, else 0.
+    # Load sea mask, 1. if node is part of the sea, else 0.
     sea_mask_np = np.load(
         os.path.join(static_dir_path, "sea_mask.npy")
     )  # (depths, h, w)

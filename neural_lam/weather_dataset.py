@@ -41,7 +41,9 @@ class WeatherDataset(torch.utils.data.Dataset):
             "data", dataset_name, "samples", split
         )
 
-        member_file_regexp = "ana_data_*.npy" if control_only else "*_data_*.npy"
+        member_file_regexp = (
+            "ana_data_*.npy" if control_only else "*_data_*.npy"
+        )
         sample_paths = glob.glob(
             os.path.join(self.sample_dir_path, member_file_regexp)
         )
@@ -66,12 +68,20 @@ class WeatherDataset(torch.utils.data.Dataset):
         self.standardize = standardize
         if standardize:
             ds_stats = utils.load_dataset_stats(dataset_name, "cpu")
-            self.data_mean, self.data_std, self.forcing_mean, self.forcing_std = (
+            (
+                self.data_mean,
+                self.data_std,
+                self.forcing_mean,
+                self.forcing_std,
+            ) = (
                 ds_stats["data_mean"],
                 ds_stats["data_std"],
                 ds_stats["forcing_mean"],
                 ds_stats["forcing_std"],
             )
+            self.interior_mask = utils.load_mask(dataset_name, "cpu")[
+                "interior_mask"
+            ]
 
         # If subsample index should be sampled (only duing training)
         self.random_subsample = split == "train"
@@ -112,6 +122,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         if self.standardize:
             # Standardize sample
             sample = (sample - self.data_mean) / self.data_std
+            sample = self.interior_mask * sample
 
         # Split up sample in init. states and target states
         init_states = sample[:2]  # (2, N_grid, d_features)
@@ -124,13 +135,17 @@ class WeatherDataset(torch.utils.data.Dataset):
             self.sample_dir_path,
             f"forcing_{sample_datetime}.npy",
         )
-        atm_forcing = torch.tensor(np.load(forcing_path), dtype=torch.float32)  # (N_t', N_grid, d_atm)
+        atm_forcing = torch.tensor(
+            np.load(forcing_path), dtype=torch.float32
+        )  # (N_t', N_grid, d_atm)
 
         if self.standardize:
             atm_forcing = (atm_forcing - self.forcing_mean) / self.forcing_std
 
         # Flatten and subsample atmospheric forcing
-        atm_forcing = atm_forcing[subsample_index :: self.subsample_step]  # (N_t, N_grid, d_atm)
+        atm_forcing = atm_forcing[
+            subsample_index :: self.subsample_step
+        ]  # (N_t, N_grid, d_atm)
         atm_forcing = atm_forcing[
             init_id : (init_id + self.sample_length)
         ]  # (sample_len, N_grid, 1)
