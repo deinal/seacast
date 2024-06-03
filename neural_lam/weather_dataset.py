@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 # First-party
-from neural_lam import constants, utils
+from neural_lam import utils
 
 
 class WeatherDataset(torch.utils.data.Dataset):
@@ -158,6 +158,13 @@ class WeatherDataset(torch.utils.data.Dataset):
         # Extract for initial step
         start_of_year = dt.datetime(dt_obj.year, 1, 1)
         init_seconds_into_year = (dt_obj - start_of_year).total_seconds()
+        is_leap_year = dt_obj.year % 4 == 0 and (
+            dt_obj.year % 100 != 0 or dt_obj.year % 400 == 0
+        )
+        if is_leap_year:
+            seconds_in_year = 366 * 24 * 60 * 60
+        else:
+            seconds_in_year = 365 * 24 * 60 * 60
 
         # Add increments for all steps
         day_inc = (
@@ -170,7 +177,7 @@ class WeatherDataset(torch.utils.data.Dataset):
 
         # Encode as sin/cos
         year_angle = (
-            (second_into_year / constants.SECONDS_IN_YEAR) * 2 * torch.pi
+            (second_into_year / seconds_in_year) * 2 * torch.pi
         )  # (sample_len,)
         datetime_forcing = torch.stack(
             (

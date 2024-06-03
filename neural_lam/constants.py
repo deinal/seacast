@@ -4,10 +4,6 @@ import numpy as np
 
 WANDB_PROJECT = "seacast"
 
-SECONDS_IN_YEAR = (
-    365 * 24 * 60 * 60
-)  # Assuming no leap years in dataset (2024 is next)
-
 # Log prediction error for these lead times
 VAL_STEP_LOG_ERRORS = np.array([1, 3, 4])
 
