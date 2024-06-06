@@ -348,3 +348,19 @@ def init_wandb_metrics(wandb_logger):
     experiment.define_metric("val_mean_loss", summary="min")
     for step in constants.VAL_STEP_LOG_ERRORS:
         experiment.define_metric(f"val_loss_unroll{step}", summary="min")
+
+
+def get_ar_steps(total_epochs, max_steps, change_point=0.8):
+    """
+    Calculate progressively increasing steps and change points
+    """
+    start_epoch = int(change_point * total_epochs)
+    interval = (total_epochs - start_epoch) // (max_steps - 1)
+    change_epochs = [start_epoch + i * interval for i in range(max_steps - 1)]
+
+    if change_epochs[-1] >= total_epochs:
+        change_epochs[-1] = total_epochs - 1
+
+    ar_steps = [i + 2 for i in range(max_steps - 1)]
+
+    return change_epochs, ar_steps

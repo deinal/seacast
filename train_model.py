@@ -22,6 +22,31 @@ MODELS = {
 }
 
 
+class DynamicARStepCallback(pl.Callback):
+    """
+    Progressively update number of ar steps during training
+    """
+
+    def __init__(self, train_loader, change_epochs, ar_steps, checkpoint_dir):
+        super().__init__()
+        self.train_loader = train_loader
+        self.change_epochs = change_epochs
+        self.ar_steps = ar_steps
+        self.checkpoint_dir = checkpoint_dir
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        epoch = trainer.current_epoch
+        if epoch in self.change_epochs:
+            new_ar_step = self.ar_steps[self.change_epochs.index(epoch)]
+            self.train_loader.dataset.update_pred_length(new_ar_step)
+            print(f"Epoch {epoch}: Updating AR steps to {new_ar_step}")
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        epoch = trainer.current_epoch
+        if epoch + 1 in self.change_epochs:
+            trainer.save_checkpoint(f"{self.checkpoint_dir}/epoch_{epoch}.ckpt")
+
+
 def main():
     """
     Main function for training and evaluating models
@@ -141,15 +166,21 @@ def main():
         "--ar_steps",
         type=int,
         default=1,
-        help="Number of steps to unroll prediction for in loss (1-19) "
+        help="Number of steps to unroll prediction for in loss (1-5) "
         "(default: 1)",
     )
     parser.add_argument(
-        "--control_only",
-        type=int,
-        default=0,
-        help="Train only on control member of ensemble data "
-        "(default: 0 (False))",
+        "--finetune_start",
+        type=float,
+        default=0.8,
+        help="Fraction of epochs after which ar steps are increased "
+        "(default: 0.8)",
+    )
+    parser.add_argument(
+        "--data_subset",
+        choices=["analysis", "reanalysis"],
+        default=None,
+        help="Type of data to use: 'analysis' or 'reanalysis' (default: None)",
     )
     parser.add_argument(
         "--loss",
@@ -192,7 +223,7 @@ def main():
 
     # Asserts for arguments
     assert args.model in MODELS, f"Unknown model: {args.model}"
-    assert args.step_length <= 6, "Too high step length"
+    assert args.step_length <= 5, "Too high step length"
     assert args.eval in (
         None,
         "val",
@@ -209,11 +240,11 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         WeatherDataset(
             args.dataset,
-            pred_length=args.ar_steps,
+            pred_length=1,
             split="train",
             subsample_step=args.step_length,
             subset=bool(args.subset_ds),
-            control_only=args.control_only,
+            data_subset=args.data_subset,
         ),
         args.batch_size,
         shuffle=True,
@@ -227,7 +258,7 @@ def main():
             split="val",
             subsample_step=args.step_length,
             subset=bool(args.subset_ds),
-            control_only=args.control_only,
+            data_subset=args.data_subset,
         ),
         args.batch_size,
         shuffle=False,
@@ -261,12 +292,19 @@ def main():
         f"{prefix}{args.model}-{args.processor_layers}x{args.hidden_dim}-"
         f"{time.strftime('%m_%d_%H')}-{random_run_id:04d}"
     )
+    checkpoint_dir = f"saved_models/{run_name}"
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=f"saved_models/{run_name}",
+        dirpath=checkpoint_dir,
         filename="min_val_loss",
         monitor="val_mean_loss",
         mode="min",
         save_last=True,
+    )
+    change_epochs, ar_steps = utils.get_ar_steps(
+        args.epochs, args.ar_steps, args.finetune_start
+    )
+    dynamic_ar_callback = DynamicARStepCallback(
+        train_loader, change_epochs, ar_steps, checkpoint_dir
     )
     logger = pl.loggers.WandbLogger(
         project=constants.WANDB_PROJECT, name=run_name, config=args
@@ -279,7 +317,7 @@ def main():
         accelerator=device_name,
         logger=logger,
         log_every_n_steps=1,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, dynamic_ar_callback],
         check_val_every_n_epoch=args.val_interval,
         precision=args.precision,
     )

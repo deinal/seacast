@@ -32,7 +32,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         subsample_step=1,
         standardize=True,
         subset=False,
-        control_only=False,
+        data_subset=None,
     ):
         super().__init__()
 
@@ -42,7 +42,13 @@ class WeatherDataset(torch.utils.data.Dataset):
         )
 
         member_file_regexp = (
-            "ana_data_*.npy" if control_only else "*_data_*.npy"
+            "rea_data_*.npy"
+            if data_subset == "reanalysis"
+            else (
+                "ana_data_*.npy"
+                if data_subset == "analysis"
+                else "*_data_*.npy"
+            )
         )
         sample_paths = glob.glob(
             os.path.join(self.sample_dir_path, member_file_regexp)
@@ -53,7 +59,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         # Now on form "yyymmddhh_mbrXXX"
 
         if subset:
-            self.sample_names = self.sample_names[:50]  # Limit to 50 samples
+            self.sample_names = self.sample_names[:10]  # Limit to 10 samples
 
         self.sample_length = pred_length + 2  # 2 init states
         self.subsample_step = subsample_step
@@ -83,8 +89,17 @@ class WeatherDataset(torch.utils.data.Dataset):
                 "interior_mask"
             ]
 
-        # If subsample index should be sampled (only duing training)
-        self.random_subsample = split == "train"
+        # If subsample index should be sampled
+        self.random_subsample = False
+
+    def update_pred_length(self, new_length):
+        """
+        Update prediction length
+        """
+        assert (
+            new_length + 2 <= self.original_sample_length
+        ), "Requested prediction length too long"
+        self.sample_length = new_length + 2
 
     def __len__(self):
         return len(self.sample_names)
