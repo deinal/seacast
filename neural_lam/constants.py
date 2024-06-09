@@ -5,7 +5,7 @@ import numpy as np
 WANDB_PROJECT = "seacast"
 
 # Log prediction error for these lead times
-VAL_STEP_LOG_ERRORS = np.array([1, 3, 4])
+VAL_STEP_LOG_ERRORS = np.array([1, 2, 3, 4])
 
 # Log these metrics to wandb as scalar values for
 # specific variables and lead times

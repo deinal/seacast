@@ -4,6 +4,7 @@ wandb>=0.13.10
 matplotlib>=3.7.0
 scipy>=1.10.0
 pytorch-lightning>=2.0.3
+torch-geometric>=2.2.0
 shapely>=2.0.1
 networkx>=3.0
 Cartopy>=0.22.0

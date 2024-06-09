@@ -15,6 +15,7 @@ test_*.sh
 *.html
 slurm
 hierarchical
+venv
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

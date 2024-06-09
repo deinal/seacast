@@ -26,6 +26,10 @@ class ARModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.lr = args.lr
+        self.epochs = args.epochs
+        self.scheduler = args.scheduler
+        self.initial_lr = args.initial_lr
+        self.warmup_epochs = args.warmup_epochs
 
         # Load static features for grid/data
         static_data_dict = utils.load_static_data(args.dataset)
@@ -94,7 +98,28 @@ class ARModel(pl.LightningModule):
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
+        if self.scheduler == "cosine":
+            linear_warmup = torch.optim.lr_scheduler.LinearLR(
+                opt,
+                start_factor=self.initial_lr / self.lr,
+                total_iters=self.warmup_epochs,
+            )
+            cosine_annealing = torch.optim.lr_scheduler.CosineAnnealingLR(
+                opt,
+                T_max=(self.epochs - self.warmup_epochs),
+            )
+            scheduler = torch.optim.lr_scheduler.SequentialLR(
+                opt,
+                schedulers=[linear_warmup, cosine_annealing],
+                milestones=[self.warmup_epochs],
+            )
+            return [opt], [{"scheduler": scheduler, "interval": "epoch"}]
+
         return opt
+
+    def on_train_batch_start(self, batch, batch_idx):
+        lr = self.trainer.optimizers[0].param_groups[0]["lr"]
+        print(f"Epoch {self.current_epoch}: lr={lr}")
 
     @property
     def interior_mask_bool(self):

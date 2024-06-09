@@ -350,7 +350,7 @@ def init_wandb_metrics(wandb_logger):
         experiment.define_metric(f"val_loss_unroll{step}", summary="min")
 
 
-def get_ar_steps(total_epochs, max_steps, change_point=0.8):
+def get_ar_steps(total_epochs, max_steps, change_point=0.6):
     """
     Calculate progressively increasing steps and change points
     """

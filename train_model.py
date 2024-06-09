@@ -178,6 +178,7 @@ def main():
     )
     parser.add_argument(
         "--data_subset",
+        type=str,
         choices=["analysis", "reanalysis"],
         default=None,
         help="Type of data to use: 'analysis' or 'reanalysis' (default: None)",
@@ -196,6 +197,25 @@ def main():
     )
     parser.add_argument(
         "--lr", type=float, default=1e-3, help="learning rate (default: 0.001)"
+    )
+    parser.add_argument(
+        "--scheduler",
+        type=str,
+        choices=["cosine"],
+        default=None,
+        help="learning rate decay (default: None)",
+    )
+    parser.add_argument(
+        "--initial_lr",
+        type=float,
+        default=1e-5,
+        help="Initial learning rate (default: 0.00001)",
+    )
+    parser.add_argument(
+        "--warmup_epochs",
+        type=int,
+        default=5,
+        help="Number of warmup epochs (default: 5)",
     )
     parser.add_argument(
         "--val_interval",
@@ -250,7 +270,7 @@ def main():
         shuffle=True,
         num_workers=args.n_workers,
     )
-    max_pred_length = (7 // args.step_length) - 2  # 5
+    max_pred_length = (6 // args.step_length) - 2  # 4
     val_loader = torch.utils.data.DataLoader(
         WeatherDataset(
             args.dataset,
@@ -303,6 +323,7 @@ def main():
     change_epochs, ar_steps = utils.get_ar_steps(
         args.epochs, args.ar_steps, args.finetune_start
     )
+    print("Change epochs:", change_epochs, "AR steps:", ar_steps)
     dynamic_ar_callback = DynamicARStepCallback(
         train_loader, change_epochs, ar_steps, checkpoint_dir
     )

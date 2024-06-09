@@ -2,6 +2,8 @@
 
 base_path=data/mediterranean/samples
 
+mkdir ${base_path}/val ${base_path}/test
+
 for month in {11..12}; do
     mv ${base_path}/train/rea_data_2021${month}* ${base_path}/val/
     cp ${base_path}/train/forcing_2021${month}* ${base_path}/val/
