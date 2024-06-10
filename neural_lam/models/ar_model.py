@@ -25,6 +25,7 @@ class ARModel(pl.LightningModule):
     def __init__(self, args):
         super().__init__()
         self.save_hyperparameters()
+        self.optimizer = args.optimizer
         self.lr = args.lr
         self.epochs = args.epochs
         self.scheduler = args.scheduler
@@ -94,7 +95,20 @@ class ARModel(pl.LightningModule):
         self.spatial_loss_maps = []
 
     def configure_optimizers(self):
-        opt = momo.MomoAdam(self.parameters(), lr=self.lr)
+        if self.optimizer == "adamw":
+            opt = torch.optim.AdamW(
+                self.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.95),
+                weight_decay=0.1,
+            )
+        elif self.optimizer == "momo":
+            opt = momo.Momo(self.parameters(), lr=self.lr)
+        elif self.optimizer == "momo_adam":
+            opt = momo.MomoAdam(self.parameters(), lr=self.lr)
+        else:
+            raise ValueError(f"Unsupported optimizer: {self.optimizer}")
+
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
@@ -117,7 +131,7 @@ class ARModel(pl.LightningModule):
 
         return opt
 
-    def on_train_batch_start(self, batch, batch_idx):
+    def on_train_epoch_start(self):
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
         print(f"Epoch {self.current_epoch}: lr={lr}")
 

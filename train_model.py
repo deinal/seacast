@@ -118,6 +118,12 @@ def main():
         default=32,
         help="Numerical precision to use for model (32/16/bf16) (default: 32)",
     )
+    parser.add_argument(
+        "--gradient_clip_val",
+        type=float,
+        default=32.0,
+        help="Max norm of the gradients (default: 32.0)",
+    )
 
     # Model architecture
     parser.add_argument(
@@ -188,6 +194,13 @@ def main():
         type=str,
         default="wmse",
         help="Loss function to use, see metric.py (default: wmse)",
+    )
+    parser.add_argument(
+        "--optimizer",
+        type=str,
+        choices=["adamw", "momo", "momo_adam"],
+        default="adamw",
+        help="Optimizer to use (default: adamw)",
     )
     parser.add_argument(
         "--step_length",
@@ -341,6 +354,7 @@ def main():
         callbacks=[checkpoint_callback, dynamic_ar_callback],
         check_val_every_n_epoch=args.val_interval,
         precision=args.precision,
+        gradient_clip_val=args.gradient_clip_val,
     )
 
     # Only init once, on rank 0 only
