@@ -7,6 +7,13 @@ WANDB_PROJECT = "seacast"
 # Log prediction error for these lead times
 VAL_STEP_LOG_ERRORS = np.array([1, 2, 3, 4])
 
+# Sample lengths
+SAMPLE_LEN = {
+    "train": 6,
+    "val": 6,
+    "test": 12,
+}
+
 # Log these metrics to wandb as scalar values for
 # specific variables and lead times
 # List of metrics to watch, including any prefix (e.g. val_rmse)

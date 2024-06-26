@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 # First-party
-from neural_lam import utils
+from neural_lam import constants, utils
 
 
 class WeatherDataset(torch.utils.data.Dataset):
@@ -59,13 +59,13 @@ class WeatherDataset(torch.utils.data.Dataset):
         # Now on form "yyymmddhh_mbrXXX"
 
         if subset:
-            self.sample_names = self.sample_names[:20]  # Limit to 10 samples
+            self.sample_names = self.sample_names[:10]  # Limit to 10 samples
 
         self.sample_length = pred_length + 2  # 2 init states
         self.subsample_step = subsample_step
         self.original_sample_length = (
-            6 // self.subsample_step
-        )  # 6 for 1 day steps
+            constants.SAMPLE_LEN[split] // self.subsample_step
+        )  # 6 for 1 day steps in train / val, and 12 for test
         assert (
             self.sample_length <= self.original_sample_length
         ), "Requesting too long time series samples"

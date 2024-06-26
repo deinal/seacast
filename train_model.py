@@ -121,8 +121,8 @@ def main():
     parser.add_argument(
         "--gradient_clip_val",
         type=float,
-        default=32.0,
-        help="Max norm of the gradients (default: 32.0)",
+        default=0.0,
+        help="Max norm of the gradients (default: 0.0)",
     )
 
     # Model architecture
@@ -148,8 +148,8 @@ def main():
     parser.add_argument(
         "--processor_layers",
         type=int,
-        default=4,
-        help="Number of GNN layers in processor GNN (default: 4)",
+        default=2,
+        help="Number of GNN layers in processor GNN (default: 2)",
     )
     parser.add_argument(
         "--mesh_aggr",
@@ -178,9 +178,9 @@ def main():
     parser.add_argument(
         "--finetune_start",
         type=float,
-        default=0.8,
+        default=0.6,
         help="Fraction of epochs after which ar steps are increased "
-        "(default: 0.8)",
+        "(default: 0.6)",
     )
     parser.add_argument(
         "--data_subset",
@@ -222,7 +222,7 @@ def main():
         "--initial_lr",
         type=float,
         default=1e-5,
-        help="Initial learning rate (default: 0.00001)",
+        help="Initial learning rate (default: 1e-5)",
     )
     parser.add_argument(
         "--warmup_epochs",
@@ -256,7 +256,7 @@ def main():
 
     # Asserts for arguments
     assert args.model in MODELS, f"Unknown model: {args.model}"
-    assert args.step_length <= 5, "Too high step length"
+    assert args.step_length <= 4, "Too high step length"
     assert args.eval in (
         None,
         "val",
@@ -283,11 +283,11 @@ def main():
         shuffle=True,
         num_workers=args.n_workers,
     )
-    max_pred_length = (6 // args.step_length) - 2  # 4
+    val_pred_length = (constants.SAMPLE_LEN["val"] // args.step_length) - 2  # 4
     val_loader = torch.utils.data.DataLoader(
         WeatherDataset(
             args.dataset,
-            pred_length=max_pred_length,
+            pred_length=val_pred_length,
             split="val",
             subsample_step=args.step_length,
             subset=bool(args.subset_ds),
@@ -365,10 +365,13 @@ def main():
         if args.eval == "val":
             eval_loader = val_loader
         else:  # Test
+            test_pred_length = (
+                constants.SAMPLE_LEN["test"] // args.step_length
+            ) - 2
             eval_loader = torch.utils.data.DataLoader(
                 WeatherDataset(
                     args.dataset,
-                    pred_length=max_pred_length,
+                    pred_length=test_pred_length,
                     split="test",
                     subsample_step=args.step_length,
                     subset=bool(args.subset_ds),

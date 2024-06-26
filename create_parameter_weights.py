@@ -120,7 +120,9 @@ def main():
     loader_standard = torch.utils.data.DataLoader(
         ds_standard, args.batch_size, shuffle=False, num_workers=args.n_workers
     )
-    used_subsample_len = (6 // args.step_length) * args.step_length
+    used_subsample_len = (
+        constants.SAMPLE_LEN["train"] // args.step_length
+    ) * args.step_length
 
     diff_means = []
     diff_squares = []

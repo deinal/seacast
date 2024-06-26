@@ -1,13 +1,16 @@
 # Standard library
 import argparse
 import os
+from datetime import datetime
 from glob import glob
 
 # Third-party
 import numpy as np
 
 
-def prepare_states(in_directory, out_directory, n_states, prefix):
+def prepare_states(
+    in_directory, out_directory, n_states, prefix, start_date, end_date
+):
     """
     Processes and concatenates state sequences from numpy files.
 
@@ -16,9 +19,24 @@ def prepare_states(in_directory, out_directory, n_states, prefix):
         out_directory (str): Directory to store the concatenated files.
         n_states (int): Number of consecutive states to concatenate.
         prefix (str): Prefix for naming the output files.
+        start_date (str): Start date.
+        end_date (str): End date.
     """
+    # Parse dates
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+
+    print(start_dt, end_dt)
+
     # Get all .npy files sorted by date assuming filenames are date-based
-    files = sorted(glob(os.path.join(in_directory, "*.npy")))
+    all_files = sorted(glob(os.path.join(in_directory, "*.npy")))
+    files = [
+        f
+        for f in all_files
+        if start_dt
+        <= datetime.strptime(os.path.basename(f)[:8], "%Y%m%d")
+        <= end_dt
+    ]
 
     # Ensure output directory exists
     os.makedirs(out_directory, exist_ok=True)
@@ -71,7 +89,7 @@ def main():
         "-n",
         "--n_states",
         type=int,
-        default=8,
+        default=6,
         help="Number of states to concatenate",
     )
     parser.add_argument(
@@ -81,9 +99,30 @@ def main():
         required="ana_data",
         help="Prefix for the output files",
     )
+    parser.add_argument(
+        "-s",
+        "--start_date",
+        type=str,
+        default="1987-01-01",
+        help="Start date in YYYY-MM-DD format",
+    )
+    parser.add_argument(
+        "-e",
+        "--end_date",
+        type=str,
+        default="2024-05-25",
+        help="End date in YYYY-MM-DD format",
+    )
     args = parser.parse_args()
 
-    prepare_states(args.data_dir, args.out_dir, args.n_states, args.prefix)
+    prepare_states(
+        args.data_dir,
+        args.out_dir,
+        args.n_states,
+        args.prefix,
+        args.start_date,
+        args.end_date,
+    )
 
 
 if __name__ == "__main__":

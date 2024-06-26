@@ -354,6 +354,9 @@ def get_ar_steps(total_epochs, max_steps, change_point=0.6):
     """
     Calculate progressively increasing steps and change points
     """
+    if max_steps == 1:
+        return [], []
+
     start_epoch = int(change_point * total_epochs)
     interval = (total_epochs - start_epoch) // (max_steps - 1)
     change_epochs = [start_epoch + i * interval for i in range(max_steps - 1)]
