@@ -104,8 +104,16 @@ def download_static(path_prefix, mask):
     sea_depth = bathy_data.deptho.isel(depth=0)
     np.save(f"{path_prefix}/sea_depth.npy", np.nan_to_num(sea_depth, nan=0.0))
 
+    # Store bathymetry mask
     sea_mask = ~np.isnan(bathy_data.mask)
     np.save(f"{path_prefix}/sea_mask.npy", sea_mask)
+
+    # Forcing mask for the Strait of Gibraltar
+    border_mask = np.where(
+        bathy_data.mask.longitude < -5.4, bathy_data.mask, np.nan
+    )
+    border_mask = ~np.isnan(border_mask)
+    np.save(f"{path_prefix}/strait_mask.npy", border_mask)
 
     y_indices, x_indices = np.indices(sea_mask.shape[1:])
     nwp_xy = np.stack([x_indices, y_indices])
