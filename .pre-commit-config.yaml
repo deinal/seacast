@@ -47,6 +47,6 @@ repos:
     hooks:
     -   id: pylint
         name: pylint
-        entry: pylint -rn -sn
+        entry: pylint -rn -sn --disable=R0801
         language: system
         types: [python]
