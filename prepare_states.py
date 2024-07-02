@@ -1,7 +1,7 @@
 # Standard library
 import argparse
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from glob import glob
 
 # Third-party
@@ -28,7 +28,7 @@ def prepare_states(
 
     print(start_dt, end_dt)
 
-    # Get all .npy files sorted by date assuming filenames are date-based
+    # Get all numpy files sorted by date
     all_files = sorted(glob(os.path.join(in_directory, "*.npy")))
     files = [
         f
@@ -62,6 +62,62 @@ def prepare_states(
         # Save concatenated data to the output directory
         np.save(out_file, full_state)
         print(f"Saved concatenated file: {out_file}")
+
+
+def prepare_forcing(in_directory, out_directory, prefix, start_date, end_date):
+    """
+    Prepare atmospheric forcing data from HRES files.
+    """
+    hres_dir = in_directory
+
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+
+    os.makedirs(out_directory, exist_ok=True)
+
+    # Get HRES files sorted by date
+    hres_files = sorted(
+        glob(os.path.join(hres_dir, "*.npy")),
+        key=lambda x: datetime.strptime(os.path.basename(x)[:8], "%Y%m%d"),
+    )
+    hres_files = [
+        f
+        for f in hres_files
+        if start_dt
+        <= datetime.strptime(os.path.basename(f)[:8], "%Y%m%d")
+        <= end_dt
+    ]
+
+    for hres_file in hres_files:
+        hres_date = datetime.strptime(os.path.basename(hres_file)[:8], "%Y%m%d")
+        # Get files for the two preceding days
+        preceding_days_files = [
+            os.path.join(
+                hres_dir,
+                (hres_date - timedelta(days=i)).strftime("%Y%m%d") + ".npy",
+            )
+            for i in range(1, 3)
+        ]
+
+        # Load the first timestep from each preceding day's HRES file
+        init_states = []
+        for file_path in preceding_days_files:
+            data = np.load(file_path)
+            init_states.append(data[0:1])
+
+        # Load the current HRES data
+        current_hres_data = np.load(hres_file)
+
+        # Concatenate all data along the time axis
+        concatenated_forcing = np.concatenate(
+            init_states + [current_hres_data], axis=0
+        )
+
+        # Save concatenated data
+        out_filename = f"{prefix}_{os.path.basename(hres_file)}"
+        out_file = os.path.join(out_directory, out_filename)
+        np.save(out_file, concatenated_forcing)
+        print(f"Saved combined forcing data file: {out_file}")
 
 
 def main():
@@ -113,16 +169,29 @@ def main():
         default="2024-05-25",
         help="End date in YYYY-MM-DD format",
     )
+    parser.add_argument(
+        "--forecast_forcing",
+        action="store_true",
+    )
     args = parser.parse_args()
 
-    prepare_states(
-        args.data_dir,
-        args.out_dir,
-        args.n_states,
-        args.prefix,
-        args.start_date,
-        args.end_date,
-    )
+    if args.forecast_forcing:
+        prepare_forcing(
+            args.data_dir,
+            args.out_dir,
+            args.prefix,
+            args.start_date,
+            args.end_date,
+        )
+    else:
+        prepare_states(
+            args.data_dir,
+            args.out_dir,
+            args.n_states,
+            args.prefix,
+            args.start_date,
+            args.end_date,
+        )
 
 
 if __name__ == "__main__":

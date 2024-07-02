@@ -351,7 +351,7 @@ class ARModel(pl.LightningModule):
         # Log loss per time step forward and mean
         test_log_dict = {
             f"test_loss_unroll{step}": time_step_loss[step - 1]
-            for step in constants.VAL_STEP_LOG_ERRORS
+            for step in constants.TEST_STEP_LOG_ERRORS
         }
         test_log_dict["test_mean_loss"] = mean_loss
 
@@ -384,7 +384,7 @@ class ARModel(pl.LightningModule):
         spatial_loss = self.loss(
             prediction, target, pred_std, average_grid=False
         )  # (B, pred_steps, num_grid_nodes)
-        log_spatial_losses = spatial_loss[:, constants.VAL_STEP_LOG_ERRORS - 1]
+        log_spatial_losses = spatial_loss[:, constants.TEST_STEP_LOG_ERRORS - 1]
         self.spatial_loss_maps.append(log_spatial_losses)
         # (B, N_log, num_grid_nodes)
 
@@ -609,7 +609,7 @@ class ARModel(pl.LightningModule):
                     title=f"Test loss, t={t_i} ({self.step_length*t_i} d)",
                 )
                 for t_i, loss_map in zip(
-                    constants.VAL_STEP_LOG_ERRORS, mean_spatial_loss
+                    constants.TEST_STEP_LOG_ERRORS, mean_spatial_loss
                 )
             ]
 
@@ -625,7 +625,7 @@ class ARModel(pl.LightningModule):
             pdf_loss_maps_dir = os.path.join(wandb.run.dir, "spatial_loss_maps")
             os.makedirs(pdf_loss_maps_dir, exist_ok=True)
             for t_i, fig in zip(
-                constants.VAL_STEP_LOG_ERRORS, pdf_loss_map_figs
+                constants.TEST_STEP_LOG_ERRORS, pdf_loss_map_figs
             ):
                 fig.savefig(os.path.join(pdf_loss_maps_dir, f"loss_t{t_i}.pdf"))
             # save mean spatial loss as .pt file also

@@ -110,7 +110,7 @@ def download_static(path_prefix, mask):
 
     # Forcing mask for the Strait of Gibraltar
     border_mask = np.where(
-        bathy_data.mask.longitude < -5.4, bathy_data.mask, np.nan
+        bathy_data.mask.longitude < -5.2, bathy_data.mask, np.nan
     )
     border_mask = ~np.isnan(border_mask)
     np.save(f"{path_prefix}/strait_mask.npy", border_mask)

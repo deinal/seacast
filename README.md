@@ -28,7 +28,7 @@ Complete set of packages can be installed with `pip install -r requirements.txt`
 
 1. Create accounts on Copernicus marine (https://marine.copernicus.eu) and climate data store (https://cds.climate.copernicus.eu).
 
-2. Log in to the marine service on your machine using the Python client `copernicusmarine login`, and [set up climate credentials](https://cds.climate.copernicus.eu/api-how-to) to acess atmospheric data.
+2. Log in to the marine service on your machine using the Python client `copernicusmarine login`, and [set up climate credentials](https://cds.climate.copernicus.eu/api-how-to) to access atmospheric data.
 
 3. Then download all the training data:
 ```
