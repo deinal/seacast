@@ -181,7 +181,7 @@ data
 │       ├── sea_depth.npy                   - Sea floor depth below geoid (part of dataset)
 │       ├── sea_mask.npy                    - Sea binary mask (part of dataset)
 │       ├── sea_topography.npy              - Mean dynamic topography (part of dataset)
-│       ├── strait_mask                     - Boundary mask (part of dataset)
+│       ├── strait_mask.npy                 - Boundary mask (part of dataset)
 │       ├── grid_features.pt                - Static features of grid nodes (create_grid_features.py)
 │       ├── parameter_mean.pt               - Means of state parameters (create_parameter_weights.py)
 │       ├── parameter_std.pt                - Std.-dev. of state parameters (create_parameter_weights.py)
