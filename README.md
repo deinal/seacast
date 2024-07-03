@@ -66,9 +66,10 @@ python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/sa
 python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/test -n 16 -p forcing -s 2022-01-01 -e 2022-07-31
 ```
 
-ECMWF HRES
+ECMWF
 ```
-python prepare_states.py -d data/mediterranean/raw/hres -o data/mediterranean/samples/test -p forcing -s 2024-06-01 -e 2024-07-31 --forecast_forcing
+python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-06-01 -e 2024-07-31 --forecast_forcing
+python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-06-01 -e 2024-07-31 --forecast_forcing
 ```
 
 ### Create static features

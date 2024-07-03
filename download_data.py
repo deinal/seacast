@@ -572,33 +572,37 @@ def download_cerra(
             current_date = current_date.replace(month=int(month) + 1, day=1)
 
 
-def download_hres_forecast(
+def download_ecmwf_forecast(
     start_date,
-    start_time,
     static_path,
-    path_prefix,
+    mask,
     request_variables,
     ds_variables,
-    mask,
+    max_step,
+    model,
+    product,
+    path_prefix,
 ):
     """
-    Download ECMWF HRES forecast data for the next 10 days starting from today.
+    Download ECMWF medium-range forecast data.
 
     Args:
     start_date (datetime): The start date for data retrieval.
-    start_time (int): The start time for data retrieval.
     static_path (str): Location of static data.
-    path_prefix (str): Path where the files will be saved.
+    mask (xarray.Dataset): Bathymetry mask.
     request_variables (list): List of variables to download.
     ds_variables (list): List of variables in the dataset.
-    mask (xarray.Dataset): Bathymetry mask
+    max_step (int): Maximum time step in hours.
+    model (str): Name of the model that produced the data.
+    product (str): Forecast product.
+    path_prefix (str): Path where the files will be saved.
     """
     grid_mask = np.load(f"{static_path}/sea_mask.npy")[0]
 
     # Set up HRES client
     client = eo.Client(
         source="ecmwf",
-        model="ifs",
+        model=model,
         resol="0p25",
     )
 
@@ -607,11 +611,9 @@ def download_hres_forecast(
     # Retrieve data
     client.retrieve(
         date=start_date.strftime("%Y-%m-%d"),
-        time=start_time,
-        type="fc",
-        stream="oper",
-        step=list(range(0, 144, 3))
-        + list(range(144, 241, 6)),  # 240 hours = 10 days
+        time=0,
+        type=product,
+        step=list(range(0, max_step + 1, 6)),
         param=request_variables,
         target=grib_filename,
     )
@@ -710,8 +712,9 @@ def main():
     analysis_path = raw_path + "analysis"
     cerra_path = raw_path + "cerra"
     era5_path = raw_path + "era5"
-    hres00z_path = raw_path + "hres_00z"
-    hres12z_path = raw_path + "hres_12z"
+    hres_path = raw_path + "hres"
+    ens_path = raw_path + "ens"
+    aifs_path = raw_path + "aifs"
     forecast_path = raw_path + "forecast"
     bathymetry_mask_path = static_path + "bathy_mask.nc"
 
@@ -720,8 +723,9 @@ def main():
     os.makedirs(analysis_path, exist_ok=True)
     os.makedirs(cerra_path, exist_ok=True)
     os.makedirs(era5_path, exist_ok=True)
-    os.makedirs(hres00z_path, exist_ok=True)
-    os.makedirs(hres12z_path, exist_ok=True)
+    os.makedirs(hres_path, exist_ok=True)
+    os.makedirs(ens_path, exist_ok=True)
+    os.makedirs(aifs_path, exist_ok=True)
     os.makedirs(forecast_path, exist_ok=True)
 
     mask = load_mask(bathymetry_mask_path)
@@ -835,18 +839,50 @@ def main():
             mask,
         )
 
-        request_variables = ["10u", "10v", "2t", "msl", "ssr", "tp"]
-        ds_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
+        ifs_requests = ["10u", "10v", "2t", "msl", "ssr", "tp"]
+        ifs_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
 
-        for start_time, hres_path in zip([0, 12], [hres00z_path, hres12z_path]):
-            download_hres_forecast(
+        aifs_requests = ["10u", "10v", "2t", "msl", "tp"]
+        aifs_variables = ["u10", "v10", "t2m", "msl", "tp"]
+
+        atm_requests = [
+            {
+                "path": hres_path,
+                "requests": ifs_requests,
+                "variables": ifs_variables,
+                "model": "ifs",
+                "product": "fc",
+                "max_step": 240,
+            },
+            {
+                "path": ens_path,
+                "requests": ifs_requests,
+                "variables": ifs_variables,
+                "model": "ifs",
+                "product": "cf",
+                "max_step": 360,
+            },
+            {
+                "path": aifs_path,
+                "requests": aifs_requests,
+                "variables": aifs_variables,
+                "model": "aifs",
+                "product": "fc",
+                "max_step": 360,
+            },
+        ]
+
+        for req in atm_requests:
+            download_ecmwf_forecast(
                 start_date,
-                start_time,
                 static_path,
-                hres_path,
-                request_variables,
-                ds_variables,
                 mask,
+                req["requests"],
+                req["variables"],
+                req["max_step"],
+                req["model"],
+                req["product"],
+                req["path"],
             )
 
 
