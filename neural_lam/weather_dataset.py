@@ -33,6 +33,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         standardize=True,
         subset=False,
         data_subset=None,
+        forcing_prefix="forcing",
     ):
         super().__init__()
 
@@ -92,6 +93,8 @@ class WeatherDataset(torch.utils.data.Dataset):
         # If subsample index should be sampled
         self.random_subsample = False
 
+        self.forcing_prefix = forcing_prefix
+
     def update_pred_length(self, new_length):
         """
         Update prediction length
@@ -148,7 +151,7 @@ class WeatherDataset(torch.utils.data.Dataset):
 
         forcing_path = os.path.join(
             self.sample_dir_path,
-            f"forcing_{sample_datetime}.npy",
+            f"{self.forcing_prefix}_{sample_datetime}.npy",
         )
         atm_forcing = torch.tensor(
             np.load(forcing_path), dtype=torch.float32

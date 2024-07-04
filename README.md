@@ -55,7 +55,7 @@ Mediterranean analysis
 ```
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2021-11-01 -e 2024-03-31
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-04-01 -e 2024-05-31
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 11 -p ana_data -s 2024-06-01 -e 2024-07-31
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 16 -p ana_data -s 2024-06-30 -e 2024-08-10
 ```
 
 ERA5
@@ -68,8 +68,8 @@ python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/sa
 
 ECMWF
 ```
-python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-06-01 -e 2024-07-31 --forecast_forcing
-python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-06-01 -e 2024-07-31 --forecast_forcing
+python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-01 -e 2024-08-11 --forecast_forcing
+python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-06-01 -e 2024-08-11 --forecast_forcing
 ```
 
 ### Create static features
@@ -135,7 +135,7 @@ For a full list of possible training options, check `python train_model.py --hel
 SeaCast was evaluated on 1 GPU using `--eval test`, and by choosing the correct data subset + loading the appropriate model:
 ```
 python train_model.py \
-  --data_subset reanalysis \
+  --data_subset analysis \
   --n_workers 4 \
   --batch_size 1 \
   --step_length 1 \

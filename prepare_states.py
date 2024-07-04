@@ -43,7 +43,8 @@ def prepare_states(
 
     # Process each file, concatenate with the next t-1 files
     for i in range(len(files) - n_states + 1):
-        out_filename = f"{prefix}_{os.path.basename(files[i+2])}"
+        # Name as today's date
+        out_filename = f"{prefix}_{os.path.basename(files[i+1])}"
         out_file = os.path.join(out_directory, out_filename)
 
         if os.path.isfile(out_file):
@@ -61,63 +62,133 @@ def prepare_states(
 
         # Save concatenated data to the output directory
         np.save(out_file, full_state)
-        print(f"Saved concatenated file: {out_file}")
+        print(f"Saved states to: {out_file}")
 
 
 def prepare_forcing(in_directory, out_directory, prefix, start_date, end_date):
     """
-    Prepare atmospheric forcing data from HRES files.
+    Prepare atmospheric forcing data from forecasts.
     """
-    hres_dir = in_directory
+    forecast_dir = in_directory
 
     start_dt = datetime.strptime(start_date, "%Y-%m-%d")
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
 
     os.makedirs(out_directory, exist_ok=True)
 
-    # Get HRES files sorted by date
-    hres_files = sorted(
-        glob(os.path.join(hres_dir, "*.npy")),
+    # Get files sorted by date
+    forecast_files = sorted(
+        glob(os.path.join(forecast_dir, "*.npy")),
         key=lambda x: datetime.strptime(os.path.basename(x)[:8], "%Y%m%d"),
     )
-    hres_files = [
+    forecast_files = [
         f
-        for f in hres_files
+        for f in forecast_files
         if start_dt
         <= datetime.strptime(os.path.basename(f)[:8], "%Y%m%d")
         <= end_dt
     ]
 
-    for hres_file in hres_files:
-        hres_date = datetime.strptime(os.path.basename(hres_file)[:8], "%Y%m%d")
-        # Get files for the two preceding days
-        preceding_days_files = [
-            os.path.join(
-                hres_dir,
-                (hres_date - timedelta(days=i)).strftime("%Y%m%d") + ".npy",
-            )
-            for i in range(1, 3)
-        ]
+    for forecast_file in forecast_files:
+        forecast_date = datetime.strptime(
+            os.path.basename(forecast_file)[:8], "%Y%m%d"
+        )
+        # Get files for the preceding day
+        preceding_day_file = os.path.join(
+            forecast_dir,
+            (forecast_date - timedelta(days=1)).strftime("%Y%m%d") + ".npy",
+        )
+        preceding_day_data = np.load(preceding_day_file)[0:1]
 
-        # Load the first timestep from each preceding day's HRES file
-        init_states = []
-        for file_path in preceding_days_files:
-            data = np.load(file_path)
-            init_states.append(data[0:1])
+        # Load the current forecast data
+        current_forecast_data = np.load(forecast_file)[:15]
 
-        # Load the current HRES data
-        current_hres_data = np.load(hres_file)
+        print(preceding_day_data.shape, current_forecast_data.shape)
 
         # Concatenate all data along the time axis
         concatenated_forcing = np.concatenate(
-            init_states + [current_hres_data], axis=0
+            [preceding_day_data, current_forecast_data], axis=0
         )
 
         # Save concatenated data
-        out_filename = f"{prefix}_{os.path.basename(hres_file)}"
+        out_filename = f"{prefix}_{os.path.basename(forecast_file)}"
         out_file = os.path.join(out_directory, out_filename)
         np.save(out_file, concatenated_forcing)
-        print(f"Saved combined forcing data file: {out_file}")
+        print(f"Saved forcing states to: {out_file}")
+
+
+def prepare_aifs_forcing(
+    in_directory, out_directory, prefix, start_date, end_date
+):
+    """
+    Prepare atmospheric forcing data from AIFS forecasts (add SSR from ENS).
+    """
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+
+    os.makedirs(out_directory, exist_ok=True)
+
+    # Get files sorted by date
+    forecast_files = sorted(
+        glob(os.path.join(in_directory, "*.npy")),
+        key=lambda x: datetime.strptime(os.path.basename(x)[:8], "%Y%m%d"),
+    )
+    forecast_files = [
+        f
+        for f in forecast_files
+        if start_dt
+        <= datetime.strptime(os.path.basename(f)[:8], "%Y%m%d")
+        <= end_dt
+    ]
+
+    ifs_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
+
+    for forecast_file in forecast_files:
+        forecast_date = datetime.strptime(
+            os.path.basename(forecast_file)[:8], "%Y%m%d"
+        )
+
+        # Load the preceding day's data
+        preceding_day_file = os.path.join(
+            in_directory,
+            (forecast_date - timedelta(days=1)).strftime("%Y%m%d") + ".npy",
+        )
+        preceding_day_data = np.load(preceding_day_file)[0:1]
+
+        # Insert SSR from ENS data
+        preceding_day_ens_data = np.load(
+            preceding_day_file.replace("aifs", "ens")
+        )[0:1]
+        preceding_day_ssr_data = preceding_day_ens_data[
+            ..., ifs_variables.index("ssr")
+        ]
+        preceding_day_data = np.insert(
+            preceding_day_data,
+            ifs_variables.index("ssr"),
+            preceding_day_ssr_data,
+            axis=-1,
+        )
+
+        # Load the current forecast data
+        current_forecast_data = np.load(forecast_file)[:15]
+
+        # Insert SSR from ENS data
+        ens_data = np.load(forecast_file.replace("aifs", "ens"))[:15]
+        ssr_data = ens_data[..., ifs_variables.index("ssr")]
+        current_forecast_data = np.insert(
+            current_forecast_data, ifs_variables.index("ssr"), ssr_data, axis=-1
+        )
+
+        # Concatenate preceding day data with current forecast data
+        aifs_data = np.concatenate(
+            [preceding_day_data, current_forecast_data], axis=0
+        )
+
+        # Save combined data
+        out_filename = f"{prefix}_{os.path.basename(forecast_file)}"
+        out_file = os.path.join(out_directory, out_filename)
+        np.save(out_file, aifs_data)
+        print(f"Saved forcing states to: {out_file}")
 
 
 def main():
@@ -176,13 +247,22 @@ def main():
     args = parser.parse_args()
 
     if args.forecast_forcing:
-        prepare_forcing(
-            args.data_dir,
-            args.out_dir,
-            args.prefix,
-            args.start_date,
-            args.end_date,
-        )
+        if args.data_dir.endswith("aifs"):
+            prepare_aifs_forcing(
+                args.data_dir,
+                args.out_dir,
+                args.prefix,
+                args.start_date,
+                args.end_date,
+            )
+        else:
+            prepare_forcing(
+                args.data_dir,
+                args.out_dir,
+                args.prefix,
+                args.start_date,
+                args.end_date,
+            )
     else:
         prepare_states(
             args.data_dir,

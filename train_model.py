@@ -190,6 +190,13 @@ def main():
         help="Type of data to use: 'analysis' or 'reanalysis' (default: None)",
     )
     parser.add_argument(
+        "--forcing_prefix",
+        type=str,
+        choices=["forcing", "ens_forcing", "aifs_forcing"],
+        default="forcing",
+        help="Type of forcing to use (default: forcing => ERA5 files)",
+    )
+    parser.add_argument(
         "--loss",
         type=str,
         default="wmse",
@@ -278,6 +285,7 @@ def main():
             subsample_step=args.step_length,
             subset=bool(args.subset_ds),
             data_subset=args.data_subset,
+            forcing_prefix=args.forcing_prefix,
         ),
         args.batch_size,
         shuffle=True,
@@ -292,6 +300,7 @@ def main():
             subsample_step=args.step_length,
             subset=bool(args.subset_ds),
             data_subset=args.data_subset,
+            forcing_prefix=args.forcing_prefix,
         ),
         args.batch_size,
         shuffle=False,
@@ -375,6 +384,8 @@ def main():
                     split="test",
                     subsample_step=args.step_length,
                     subset=bool(args.subset_ds),
+                    data_subset=args.data_subset,
+                    forcing_prefix=args.forcing_prefix,
                 ),
                 args.batch_size,
                 shuffle=False,
