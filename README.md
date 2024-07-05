@@ -5,7 +5,7 @@
     <img src="figures/hi_graph.png" width="700">
 </p>
 
-The code is based on [Neural-LAM](https://github.com/joeloskarsson/neural-lam): a repository of graph-based neural weather prediction models for limited area modeling. Specifically, the [`ccai_paper_2023`](https://github.com/joeloskarsson/neural-lam/tree/ccai_paper_2023) branch.
+The code is based on **Neural-LAM**: a repository of graph-based neural weather prediction models for limited area modeling. Reference [below](#neural-lam), and up-to-date developments for atmospheric modeling in the [original repo](https://github.com/mllam/neural-lam).
 
 The repository contains three meshgraphnet variations:
 
@@ -209,7 +209,8 @@ from the root directory of the repository.
 
 ## Cite
 
-Neural-LAM
+### Neural-LAM
+
 ```
 @inproceedings{oskarsson2023graphbased,
     title={Graph-based Neural Weather Prediction for Limited Area Modeling},
