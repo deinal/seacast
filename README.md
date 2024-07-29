@@ -55,7 +55,6 @@ Mediterranean analysis
 ```
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2021-11-01 -e 2024-03-31
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-04-01 -e 2024-05-31
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 16 -p ana_data -s 2024-06-30 -e 2024-08-10
 ```
 
 ERA5
@@ -66,10 +65,11 @@ python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/sa
 python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/test -n 16 -p forcing -s 2022-01-01 -e 2022-07-31
 ```
 
-ECMWF
+Forecast data
 ```
-python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-01 -e 2024-08-11 --forecast_forcing
-python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-06-01 -e 2024-08-11 --forecast_forcing
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 16 -p ana_data -s 2024-06-30 -e 2024-08-10 --forecast
+python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-01 -e 2024-08-11 --forecast
+python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-06-01 -e 2024-08-11 --forecast
 ```
 
 ### Create static features
@@ -182,7 +182,7 @@ data
 │       ├── sea_depth.npy                   - Sea floor depth below geoid (part of dataset)
 │       ├── sea_mask.npy                    - Sea binary mask (part of dataset)
 │       ├── sea_topography.npy              - Mean dynamic topography (part of dataset)
-│       ├── strait_mask.npy                 - Boundary mask (part of dataset)
+│       ├── boundary_mask.npy               - Boundary mask (part of dataset)
 │       ├── grid_features.pt                - Static features of grid nodes (create_grid_features.py)
 │       ├── parameter_mean.pt               - Means of state parameters (create_parameter_weights.py)
 │       ├── parameter_std.pt                - Std.-dev. of state parameters (create_parameter_weights.py)

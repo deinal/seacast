@@ -113,7 +113,7 @@ def download_static(path_prefix, mask):
         bathy_data.mask.longitude < -5.2, bathy_data.mask, np.nan
     )
     border_mask = ~np.isnan(border_mask)
-    np.save(f"{path_prefix}/strait_mask.npy", border_mask)
+    np.save(f"{path_prefix}/boundary_mask.npy", border_mask)
 
     y_indices, x_indices = np.indices(sea_mask.shape[1:])
     nwp_xy = np.stack([x_indices, y_indices])

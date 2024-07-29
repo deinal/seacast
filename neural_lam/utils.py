@@ -80,9 +80,9 @@ def load_static_data(dataset_name, device="cpu"):
             os.path.join(static_dir_path, fn), map_location=device
         )
 
-    # Load strait mask, 1. if node is part of strait, else 0.
-    strait_mask_np = np.load(
-        os.path.join(static_dir_path, "strait_mask.npy")
+    # Load boundary mask, 1. if node is part of boundary, else 0.
+    boundary_mask_np = np.load(
+        os.path.join(static_dir_path, "boundary_mask.npy")
     )  # (depths, h, w)
 
     # Load sea mask, 1. if node is part of the sea, else 0.
@@ -94,17 +94,17 @@ def load_static_data(dataset_name, device="cpu"):
     surface_mask_np = sea_mask_np[0]
 
     # Grid mask for all depth levels to be multiplied with output states
-    strait_mask = torch.tensor(
-        strait_mask_np[:, surface_mask_np],
+    boundary_mask = torch.tensor(
+        boundary_mask_np[:, surface_mask_np],
         dtype=torch.float32,
         device=device,
     )  # (depths, N_grid)
     border_mask = []
     for level_applies in constants.LEVELS:
         if level_applies:
-            border_mask.append(strait_mask)  # Multi level
+            border_mask.append(boundary_mask)  # Multi level
         else:
-            border_mask.append(strait_mask[0].unsqueeze(0))  # Single level
+            border_mask.append(boundary_mask[0].unsqueeze(0))  # Single level
     border_mask = (
         torch.cat(border_mask, dim=0).transpose(0, 1).unsqueeze(0)
     )  # 1, N_grid, d_features
