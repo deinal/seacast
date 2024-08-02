@@ -15,8 +15,6 @@ copernicusmarine>=1.2.0
 momo-opt>=0.1.0
 cdsapi>=0.7.0
 ecmwf-opendata>=0.3.8
-scipy>=1.10.1
-cfgrib>=0.9.12
 # for dev
 codespell>=2.0.0
 black>=21.9b0

@@ -20,8 +20,8 @@ class WeatherDataset(torch.utils.data.Dataset):
     dim_y = 763
     N_grid = 147134
     d_features = 75
-    d_atm = 6
-    d_forcing = 8
+    d_atm = 4
+    d_forcing = 6
     """
 
     def __init__(
@@ -57,10 +57,10 @@ class WeatherDataset(torch.utils.data.Dataset):
         if split == "test":
             sample_paths = sorted(sample_paths)
         self.sample_names = [path.split("/")[-1][:-4] for path in sample_paths]
-        # Now on form "yyymmddhh_mbrXXX"
+        # Now on form "yyymmdd"
 
         if subset:
-            self.sample_names = self.sample_names[:10]  # Limit to 10 samples
+            self.sample_names = self.sample_names[:20]  # Limit to 10 samples
 
         self.sample_length = pred_length + 2  # 2 init states
         self.subsample_step = subsample_step
@@ -115,8 +115,8 @@ class WeatherDataset(torch.utils.data.Dataset):
             full_sample = torch.tensor(
                 np.load(sample_path), dtype=torch.float32
             )  # (N_t', N_grid, d_features)
-        except ValueError:
-            print(f"Failed to load {sample_path}")
+        except Exception as e:
+            raise ValueError(f"Error loading sample {sample_path}") from e
 
         # Only use every ss_step:th time step, sample which of ss_step
         # possible such time series
@@ -166,7 +166,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         ]  # (N_t, N_grid, d_atm)
         atm_forcing = atm_forcing[
             init_id : (init_id + self.sample_length)
-        ]  # (sample_len, N_grid, 1)
+        ]  # (sample_len, N_grid, d_atm)
 
         # Time of day and year
         dt_obj = dt.datetime.strptime(sample_datetime, "%Y%m%d")

@@ -6,13 +6,13 @@ WANDB_PROJECT = "seacast"
 
 # Log prediction error for these lead times
 VAL_STEP_LOG_ERRORS = np.array([1, 2, 3, 4])
-TEST_STEP_LOG_ERRORS = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+TEST_STEP_LOG_ERRORS = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
 
 # Sample lengths
 SAMPLE_LEN = {
     "train": 6,
     "val": 6,
-    "test": 12,
+    "test": 16,
 }
 
 # Log these metrics to wandb as scalar values for
@@ -82,7 +82,7 @@ GRID_LIMITS = [-6, 36.291668, 30.1875, 45.979168]
 PROJECTION = cartopy.crs.PlateCarree()
 
 # Data dimensions
-GRID_FORCING_DIM = 8 * 3  # 2 feat. for 3 time-step window + 0 batch-static
+GRID_FORCING_DIM = 6 * 3  # 6 feat. for 3 time-step window + 0 batch-static
 GRID_STATE_DIM = 75
 
 DEPTHS = [

@@ -90,23 +90,29 @@ def main():
         )  # (N_batch, d_features,)
 
         # Atmospheric forcing at 1st windowed position
-        forcing_batch = forcing_batch[:, :, :, :6]
-        forcing_means.append(torch.mean(forcing_batch))  # (,)
-        forcing_squares.append(torch.mean(forcing_batch**2))  # (,)
+        forcing_batch = forcing_batch[
+            :, :, :, :4
+        ]  # (N_batch, N_t-2, N_grid, d_atm)
+        forcing_means.append(
+            torch.mean(forcing_batch, dim=(1, 2))
+        )  # (N_batch, d_atm)
+        forcing_squares.append(
+            torch.mean(forcing_batch**2, dim=(1, 2))
+        )  # (N_batch, d_atm)
 
     mean = torch.mean(torch.cat(means, dim=0), dim=0)  # (d_features)
     second_moment = torch.mean(torch.cat(squares, dim=0), dim=0)
     std = torch.sqrt(second_moment - mean**2)  # (d_features)
 
-    forcing_mean = torch.mean(torch.stack(forcing_means))  # (,)
-    forcing_second_moment = torch.mean(torch.stack(forcing_squares))  # (,)
-    forcing_std = torch.sqrt(forcing_second_moment - forcing_mean**2)  # (,)
-    forcing_stats = torch.stack((forcing_mean, forcing_std))
+    forcing_mean = torch.mean(torch.cat(forcing_means, dim=0), dim=0)  # (d_atm)
+    forcing_second_moment = torch.mean(torch.cat(forcing_squares, dim=0), dim=0)
+    forcing_std = torch.sqrt(forcing_second_moment - forcing_mean**2)  # (d_atm)
 
     print("Saving mean, std.-dev...")
     torch.save(mean, os.path.join(static_dir_path, "parameter_mean.pt"))
     torch.save(std, os.path.join(static_dir_path, "parameter_std.pt"))
-    torch.save(forcing_stats, os.path.join(static_dir_path, "forcing_stats.pt"))
+    torch.save(forcing_mean, os.path.join(static_dir_path, "forcing_mean.pt"))
+    torch.save(forcing_std, os.path.join(static_dir_path, "forcing_std.pt"))
 
     # Compute mean and std.-dev. of one-step differences across the dataset
     print("Computing mean and std.-dev. for one-step differences...")

@@ -46,23 +46,19 @@ python download_data.py -d era5 -s 1987-01-01 -e 2024-05-31
 
 Mediterranean reanalysis
 ```
-python prepare_states.py -d data/mediterranean/raw/reanalysis -o data/mediterranean/samples/train -n 6 -p rea_data -s 1987-01-01 -e 2021-11-30
-python prepare_states.py -d data/mediterranean/raw/reanalysis -o data/mediterranean/samples/val -n 6 -p rea_data -s 2021-11-01 -e 2021-12-31
-python prepare_states.py -d data/mediterranean/raw/reanalysis -o data/mediterranean/samples/test -n 16 -p rea_data -s 2022-01-01 -e 2022-07-31
+python prepare_states.py -d data/mediterranean/raw/reanalysis -o data/mediterranean/samples/train -n 6 -p rea_data -s 1987-01-01 -e 2021-12-31
 ```
 
 Mediterranean analysis
 ```
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2021-11-01 -e 2024-03-31
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-04-01 -e 2024-05-31
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2022-01-01 -e 2024-04-30
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-05-01 -e 2024-06-30
 ```
 
 ERA5
 ```
-python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/train -n 6 -p forcing -s 1987-01-01 -e 2024-03-31
-python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/val -n 6 -p forcing -s 2021-11-01 -e 2021-12-31
-python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/val -n 6 -p forcing -s 2024-04-01 -e 2024-05-31
-python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/test -n 16 -p forcing -s 2022-01-01 -e 2022-07-31
+python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/train -n 6 -p forcing -s 1987-01-01 -e 2024-04-30
+python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/val -n 6 -p forcing -s 2024-05-01 -e 2024-06-30
 ```
 
 Forecast data
@@ -111,13 +107,13 @@ wandb off
 SeaCast was trained on 4 nodes with 8 GPUs each:
 ```
 python train_model.py \
-  --data_subset reanalysis \
   --epochs 200 \
   --n_workers 4 \
   --batch_size 1 \
   --step_length 1 \
   --ar_steps 4 \
   --lr 0.001 \
+  --optimizer momo_adam \
   --scheduler cosine \
   --finetune_start 0.6 \
   --model hi_lam \
@@ -126,16 +122,15 @@ python train_model.py \
   --hidden_dim 128 \
   --n_nodes 4
 ```
-For finetuing update arguments `--data_subset analysis`, `--epochs 50` and `--lr 0.0001`.
 
 For a full list of possible training options, check `python train_model.py --help`.
 
 ## Evaluation
 
-SeaCast was evaluated on 1 GPU using `--eval test`, and by choosing the correct data subset + loading the appropriate model:
+SeaCast was evaluated on 1 GPU using `--eval test`:
 ```
 python train_model.py \
-  --data_subset analysis \
+  --forcing_prefix aifs_forcing \
   --n_workers 4 \
   --batch_size 1 \
   --step_length 1 \
@@ -188,7 +183,8 @@ data
 │       ├── parameter_std.pt                - Std.-dev. of state parameters (create_parameter_weights.py)
 │       ├── diff_mean.pt                    - Means of one-step differences (create_parameter_weights.py)
 │       ├── diff_std.pt                     - Std.-dev. of one-step differences (create_parameter_weights.py)
-│       ├── forcing_stats.pt                - Mean and std.-dev. of forcing (create_parameter_weights.py)
+│       ├── forcing_mean.pt                 - Means of atmospheric forcing (create_parameter_weights.py)
+│       ├── forcing_std.pt                  - Std.-dev. of atmospheric forcing (create_parameter_weights.py)
 │       └── parameter_weights.npy           - Loss weights for different state parameters (create_parameter_weights.py)
 ├── baltic
 ├── ...

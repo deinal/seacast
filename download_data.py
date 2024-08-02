@@ -6,12 +6,10 @@ from datetime import datetime, timedelta
 
 # Third-party
 import cdsapi
-import cfgrib
 import copernicusmarine as cm
 import ecmwf.opendata as eo
 import numpy as np
 import pandas as pd
-import scipy
 import xarray as xr
 
 # First-party
@@ -350,7 +348,7 @@ def download_era5(
                 "year": str(year),
                 "month": [f"{m:02d}" for m in range(month, month + 6)],
                 "day": [f"{d:02d}" for d in range(1, 32)],
-                "time": [f"{h:02d}:00" for h in range(0, 24, 3)],
+                "time": [f"{h:02d}:00" for h in range(0, 24, 6)],
                 "area": [
                     mask.latitude.max().item(),
                     mask.longitude.min().item(),
@@ -396,180 +394,6 @@ def download_era5(
             current_date = current_date.replace(year=year + 1, month=1, day=1)
         else:
             current_date = current_date.replace(month=month + 6, day=1)
-
-
-def download_cerra(
-    start_date,
-    end_date,
-    request_variables,
-    ds_variables,
-    static_path,
-    path_prefix,
-    mask,
-):
-    """
-    Download and save daily CERRA data.
-
-    Args:
-    start_date (datetime): The start date for data retrieval.
-    end_date (datetime): The end date for data retrieval.
-    request_variables (list): List of variables to request from cds.
-    ds_variables (list): List of variables in the dataset.
-    static_path (str): Location of static data.
-    path_prefix (str): The directory path prefix where the files will be saved.
-    mask (xarray.Dataset): Bathymetry mask.
-    """
-    grid_mask = np.load(f"{static_path}/sea_mask.npy")[0]
-
-    client = cdsapi.Client()
-    current_date = start_date
-    while current_date <= end_date:
-        year = current_date.year
-        month = current_date.strftime("%m")
-
-        filename = f"{path_prefix}/{current_date.strftime('%Y%m')}.grib"
-
-        client.retrieve(
-            "reanalysis-cerra-single-levels",
-            {
-                "format": "grib",
-                "data_type": "reanalysis",
-                "level_type": "surface_or_atmosphere",
-                "product_type": "forecast",
-                "variable": request_variables,
-                "year": year,
-                "month": month,
-                "day": list(range(1, 32)),
-                "time": "00:00",
-                "leadtime_hour": [
-                    "1",
-                    "3",
-                    "6",
-                    "9",
-                    "12",
-                    "15",
-                    "18",
-                    "21",
-                ],
-            },
-            filename,
-        )
-        print(f"Downloaded {filename}")
-
-        datasets = cfgrib.open_datasets(filename)
-        updated_datasets = []
-        for ds in datasets:
-            ds = ds.drop_vars(["heightAboveGround"], errors="ignore")
-            updated_datasets.append(ds)
-        ds = xr.merge(updated_datasets)
-
-        ds["u10"] = -ds.si10 * np.sin(np.deg2rad(ds.wdir10))
-        ds["v10"] = -ds.si10 * np.cos(np.deg2rad(ds.wdir10))
-        ds = ds.drop_vars(["si10", "wdir10"])
-
-        # Average lead times for each day
-        daily_ds = ds.resample(step="1D").mean()
-
-        dims = daily_ds["longitude"].dims
-        new_longitudes = np.where(
-            daily_ds["longitude"] > 180,
-            daily_ds["longitude"] - 360,
-            daily_ds["longitude"],
-        )
-        daily_ds = daily_ds.assign_coords(longitude=(dims, new_longitudes))
-
-        # Apply geographic filtering
-        min_lon, max_lon = mask.longitude.min() - 1, mask.longitude.max() + 1
-        min_lat, max_lat = mask.latitude.min() - 1, mask.latitude.max() + 1
-        daily_ds = daily_ds.where(
-            (daily_ds.longitude >= min_lon)
-            & (daily_ds.longitude <= max_lon)
-            & (daily_ds.latitude >= min_lat)
-            & (daily_ds.latitude <= max_lat),
-            drop=True,
-        )
-
-        # Set up the target grid
-        target_lon, target_lat = np.meshgrid(mask.longitude, mask.latitude)
-        target_points = np.vstack((target_lon.ravel(), target_lat.ravel())).T
-
-        interp_dataset = xr.Dataset()
-        all_variable_data = []
-        variable_names = list(daily_ds.data_vars)
-
-        # Collect flattened data for all variables across all time steps
-        for var_name, da in daily_ds.data_vars.items():
-            all_variable_data.append(da.values.reshape(len(daily_ds.time), -1))
-
-        # Convert list to an array (time, npoints, nvars)
-        all_variable_data = np.stack(all_variable_data, axis=-1)
-
-        # Prepare the structure in interp_dataset for each variable
-        for var_name in variable_names:
-            interp_dataset[var_name] = xr.DataArray(
-                np.empty(
-                    (
-                        len(daily_ds.time),
-                        len(mask.latitude),
-                        len(mask.longitude),
-                    )
-                ),
-                coords={
-                    "time": daily_ds.time,
-                    "latitude": mask.latitude,
-                    "longitude": mask.longitude,
-                },
-                dims=["time", "latitude", "longitude"],
-            )
-
-        # Interpolate each time step
-        for time_idx in range(len(daily_ds.time)):
-            lat_flat = daily_ds.latitude.values.flatten()
-            lon_flat = daily_ds.longitude.values.flatten()
-            coords = np.vstack((lon_flat, lat_flat)).T
-
-            # Variables flattened for the current time step
-            variable_flat = all_variable_data[
-                time_idx, :, :
-            ]  # (npoints, nvars)
-
-            # Interpolate timestep
-            interp = scipy.interpolate.LinearNDInterpolator(
-                coords, variable_flat
-            )
-            interp_values = interp(target_points)  # (npoints, nvars)
-
-            # Reshape interpolated values back to grid and assign to dataset
-            for var_idx, var_name in enumerate(variable_names):
-                interp_values_var = interp_values[:, var_idx].reshape(
-                    target_lon.shape
-                )
-                interp_dataset[var_name][time_idx] = interp_values_var
-
-        masked_data = select(interp_dataset, mask)
-
-        # Save in numpy format with shape (n_grid, f)
-        for single_date in masked_data.time.values:
-            date_str = pd.to_datetime(single_date).strftime("%Y%m%d")
-            daily_data = masked_data.sel(time=single_date)
-            combined_data = []
-            for var in ds_variables:
-                data = daily_data[var].values  # h, w
-                combined_data.append(data)
-
-            combined_data = np.stack(combined_data, axis=-1)  # h, w, f
-            clean_data = np.nan_to_num(combined_data, nan=0.0)
-
-            np.save(
-                f"{path_prefix}/{date_str}.npy", clean_data[grid_mask, :]
-            )  # n_grid, f
-            print(f"Saved daily data to {path_prefix}/{date_str}.npy")
-
-        # Increment to the next month
-        if month == "12":
-            current_date = current_date.replace(year=year + 1, month=1, day=1)
-        else:
-            current_date = current_date.replace(month=int(month) + 1, day=1)
 
 
 def download_ecmwf_forecast(
@@ -688,7 +512,7 @@ def main():
         "-d",
         "--data_source",
         type=str,
-        choices=["analysis", "reanalysis", "era5", "cerra"],
+        choices=["analysis", "reanalysis", "era5"],
         help="Choose between analysis, reanalysis or era5",
     )
     parser.add_argument(
@@ -710,7 +534,6 @@ def main():
     raw_path = args.base_path + "raw/"
     reanalysis_path = raw_path + "reanalysis"
     analysis_path = raw_path + "analysis"
-    cerra_path = raw_path + "cerra"
     era5_path = raw_path + "era5"
     hres_path = raw_path + "hres"
     ens_path = raw_path + "ens"
@@ -721,7 +544,6 @@ def main():
     os.makedirs(static_path, exist_ok=True)
     os.makedirs(reanalysis_path, exist_ok=True)
     os.makedirs(analysis_path, exist_ok=True)
-    os.makedirs(cerra_path, exist_ok=True)
     os.makedirs(era5_path, exist_ok=True)
     os.makedirs(hres_path, exist_ok=True)
     os.makedirs(ens_path, exist_ok=True)
@@ -779,26 +601,6 @@ def main():
             mask,
         )
 
-    if args.data_source == "cerra":
-        request_variables = [
-            "10m_wind_direction",
-            "10m_wind_speed",
-            "2m_temperature",
-            "mean_sea_level_pressure",
-            "surface_net_solar_radiation",
-            "total_precipitation",
-        ]
-        ds_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
-        download_cerra(
-            start_date,
-            end_date,
-            request_variables,
-            ds_variables,
-            static_path,
-            cerra_path,
-            mask,
-        )
-
     if args.data_source == "era5":
         request_variables = [
             "10m_u_component_of_wind",
@@ -808,7 +610,7 @@ def main():
             "surface_net_solar_radiation",
             "total_precipitation",
         ]
-        ds_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
+        ds_variables = ["u10", "v10", "t2m", "msl"]
         download_era5(
             start_date,
             end_date,
@@ -839,33 +641,30 @@ def main():
             mask,
         )
 
-        ifs_requests = ["10u", "10v", "2t", "msl", "ssr", "tp"]
-        ifs_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
-
-        aifs_requests = ["10u", "10v", "2t", "msl", "tp"]
-        aifs_variables = ["u10", "v10", "t2m", "msl", "tp"]
+        requests = ["10u", "10v", "2t", "msl"]
+        variables = ["u10", "v10", "t2m", "msl"]
 
         atm_requests = [
             {
                 "path": hres_path,
-                "requests": ifs_requests,
-                "variables": ifs_variables,
+                "requests": requests,
+                "variables": variables,
                 "model": "ifs",
                 "product": "fc",
                 "max_step": 240,
             },
             {
                 "path": ens_path,
-                "requests": ifs_requests,
-                "variables": ifs_variables,
+                "requests": requests,
+                "variables": variables,
                 "model": "ifs",
                 "product": "cf",
                 "max_step": 360,
             },
             {
                 "path": aifs_path,
-                "requests": aifs_requests,
-                "variables": aifs_variables,
+                "requests": requests,
+                "variables": variables,
                 "model": "aifs",
                 "product": "fc",
                 "max_step": 360,

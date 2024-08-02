@@ -217,6 +217,9 @@ def prepare_forcing(in_directory, out_directory, prefix, start_date, end_date):
 
         print(preceding_day_data.shape, current_forecast_data.shape)
 
+        preceding_day_data = preceding_day_data[:, :, :4]
+        current_forecast_data = current_forecast_data[:, :, :4]
+
         # Concatenate all data along the time axis
         concatenated_forcing = np.concatenate(
             [preceding_day_data, current_forecast_data], axis=0
@@ -226,80 +229,6 @@ def prepare_forcing(in_directory, out_directory, prefix, start_date, end_date):
         out_filename = f"{prefix}_{os.path.basename(forecast_file)}"
         out_file = os.path.join(out_directory, out_filename)
         np.save(out_file, concatenated_forcing)
-        print(f"Saved forcing states to: {out_file}")
-
-
-def prepare_aifs_forcing(
-    in_directory, out_directory, prefix, start_date, end_date
-):
-    """
-    Prepare atmospheric forcing data from AIFS forecasts (add SSR from ENS).
-    """
-    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-
-    os.makedirs(out_directory, exist_ok=True)
-
-    # Get files sorted by date
-    forecast_files = sorted(
-        glob(os.path.join(in_directory, "*.npy")),
-        key=lambda x: datetime.strptime(os.path.basename(x)[:8], "%Y%m%d"),
-    )
-    forecast_files = [
-        f
-        for f in forecast_files
-        if start_dt
-        <= datetime.strptime(os.path.basename(f)[:8], "%Y%m%d")
-        <= end_dt
-    ]
-
-    ifs_variables = ["u10", "v10", "t2m", "msl", "ssr", "tp"]
-
-    for forecast_file in forecast_files:
-        forecast_date = datetime.strptime(
-            os.path.basename(forecast_file)[:8], "%Y%m%d"
-        )
-
-        # Load the preceding day's data
-        preceding_day_file = os.path.join(
-            in_directory,
-            (forecast_date - timedelta(days=1)).strftime("%Y%m%d") + ".npy",
-        )
-        preceding_day_data = np.load(preceding_day_file)[0:1]
-
-        # Insert SSR from ENS data
-        preceding_day_ens_data = np.load(
-            preceding_day_file.replace("aifs", "ens")
-        )[0:1]
-        preceding_day_ssr_data = preceding_day_ens_data[
-            ..., ifs_variables.index("ssr")
-        ]
-        preceding_day_data = np.insert(
-            preceding_day_data,
-            ifs_variables.index("ssr"),
-            preceding_day_ssr_data,
-            axis=-1,
-        )
-
-        # Load the current forecast data
-        current_forecast_data = np.load(forecast_file)[:15]
-
-        # Insert SSR from ENS data
-        ens_data = np.load(forecast_file.replace("aifs", "ens"))[:15]
-        ssr_data = ens_data[..., ifs_variables.index("ssr")]
-        current_forecast_data = np.insert(
-            current_forecast_data, ifs_variables.index("ssr"), ssr_data, axis=-1
-        )
-
-        # Concatenate preceding day data with current forecast data
-        aifs_data = np.concatenate(
-            [preceding_day_data, current_forecast_data], axis=0
-        )
-
-        # Save combined data
-        out_filename = f"{prefix}_{os.path.basename(forecast_file)}"
-        out_file = os.path.join(out_directory, out_filename)
-        np.save(out_file, aifs_data)
         print(f"Saved forcing states to: {out_file}")
 
 
@@ -366,15 +295,7 @@ def main():
     args = parser.parse_args()
 
     if args.forecast:
-        if args.data_dir.endswith("aifs"):
-            prepare_aifs_forcing(
-                args.data_dir,
-                args.out_dir,
-                args.prefix,
-                args.start_date,
-                args.end_date,
-            )
-        elif args.data_dir.endswith("ens"):
+        if args.data_dir.endswith("aifs") or args.data_dir.endswith("ens"):
             prepare_forcing(
                 args.data_dir,
                 args.out_dir,

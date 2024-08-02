@@ -108,9 +108,14 @@ class ARModel(pl.LightningModule):
                 weight_decay=0.1,
             )
         elif self.optimizer == "momo":
-            opt = momo.Momo(self.parameters(), lr=self.lr)
+            opt = momo.Momo(self.parameters(), lr=self.lr, beta=0.9)
         elif self.optimizer == "momo_adam":
-            opt = momo.MomoAdam(self.parameters(), lr=self.lr)
+            opt = momo.MomoAdam(
+                self.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.95),
+                weight_decay=0.1,
+            )
         else:
             raise ValueError(f"Unsupported optimizer: {self.optimizer}")
 
