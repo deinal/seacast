@@ -53,6 +53,7 @@ Mediterranean analysis
 ```
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2022-01-01 -e 2024-04-30
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-05-01 -e 2024-06-30
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 17 -p ana_data -s 2024-07-22 -e 2024-08-12 --forecast
 ```
 
 ERA5
@@ -63,7 +64,7 @@ python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/sa
 
 Forecast data
 ```
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 16 -p ana_data -s 2024-06-30 -e 2024-08-10 --forecast
+python prepare_states.py -d data/mediterranean/raw/forecast -o data/mediterranean/samples/test -p for_data -s 2024-07-24 -e 2024-08-01 --forecast
 python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-01 -e 2024-08-11 --forecast
 python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-06-01 -e 2024-08-11 --forecast
 ```

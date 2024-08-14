@@ -46,8 +46,8 @@ def prepare_states(
 
     # Process each file, concatenate with the next t-1 files
     for i in range(len(files) - n_states + 1):
-        # Name as today's date
-        out_filename = f"{prefix}_{os.path.basename(files[i+1])}"
+        # Name as first forecasted date
+        out_filename = f"{prefix}_{os.path.basename(files[i + 2])}"
         out_file = os.path.join(out_directory, out_filename)
 
         if os.path.isfile(out_file):
@@ -132,27 +132,22 @@ def prepare_states_with_boundary(
 
     # Process each file, concatenate with the next t-1 files
     for i in range(len(files) - n_states + 1):
-        today = os.path.basename(files[i + 1])
-        out_filename = f"{prefix}_{today}"
+        forecast_date = os.path.basename(files[i + 2])
+        out_filename = f"{prefix}_{forecast_date}"
         out_file = os.path.join(out_directory, out_filename)
-
-        if os.path.isfile(out_file):
-            continue
 
         # Stack analysis states
         state_sequence = [np.load(files[i + j]) for j in range(n_states)]
         full_state = np.stack(state_sequence, axis=0)
         print("full state", full_state.shape)  # (n_states, N_grid, d_features)
 
-        forecast_file = files[i + 1].replace("analysis", "forecast")
-        forecast_data = np.load(forecast_file)
-        forecast_len = forecast_data.shape[0]
+        forecast_file = files[i + 2].replace("analysis", "forecast")
+        forecast_data = np.load(forecast_file)[2:]
         print(
             "forecast before", forecast_data.shape
         )  # (forecast_len, N_grid, d_features)
 
-        assert n_states >= forecast_len, "n_states less than forecast length"
-        extra_states = n_states - 1 - forecast_data.shape[0]
+        extra_states = 5
         last_forecast_state = forecast_data[-1]
         repeated_forecast_states = np.repeat(
             last_forecast_state[np.newaxis, ...], extra_states, axis=0
@@ -162,19 +157,63 @@ def prepare_states_with_boundary(
         )
         print(
             "forecast after", forecast_data.shape
-        )  # (n_states - 1, N_grid, d_features)
+        )  # (n_states - 2, N_grid, d_features)
 
         # Concatenate preceding day analysis state with forecast data
         forecast_data = np.concatenate(
-            (state_sequence[:1], forecast_data), axis=0
+            (state_sequence[:2], forecast_data), axis=0
         )  # (n_states, N_grid, d_features)
 
         full_state = (
             full_state * (1 - border_mask) + forecast_data * border_mask
         )
 
-        np.save(out_file, full_state)
+        np.save(out_file, full_state.astype(np.float32))
         print(f"Saved states to: {out_file}")
+
+
+def prepare_forecast(in_directory, out_directory, prefix, start_date, end_date):
+    """
+    Prepare forecast data by repeating the last state.
+    """
+    forecast_dir = in_directory
+
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+
+    os.makedirs(out_directory, exist_ok=True)
+
+    # Get files sorted by date
+    forecast_files = sorted(
+        glob(os.path.join(forecast_dir, "*.npy")),
+        key=lambda x: datetime.strptime(os.path.basename(x)[:8], "%Y%m%d"),
+    )
+    forecast_files = [
+        f
+        for f in forecast_files
+        if start_dt
+        <= datetime.strptime(os.path.basename(f)[:8], "%Y%m%d")
+        <= end_dt
+    ]
+
+    for forecast_file in forecast_files:
+        # Load the current forecast data
+        forecast_data = np.load(forecast_file)
+        print(forecast_data.shape)
+
+        last_forecast_state = forecast_data[-1]
+        repeated_forecast_states = np.repeat(
+            last_forecast_state[np.newaxis, ...], repeats=5, axis=0
+        )
+        forecast_data = np.concatenate(
+            [forecast_data, repeated_forecast_states], axis=0
+        )
+
+        # Save concatenated data
+        out_filename = f"{prefix}_{os.path.basename(forecast_file)}"
+        out_file = os.path.join(out_directory, out_filename)
+        np.save(out_file, forecast_data)
+        print(f"Saved forecast to: {out_file}")
 
 
 def prepare_forcing(in_directory, out_directory, prefix, start_date, end_date):
@@ -205,6 +244,14 @@ def prepare_forcing(in_directory, out_directory, prefix, start_date, end_date):
         forecast_date = datetime.strptime(
             os.path.basename(forecast_file)[:8], "%Y%m%d"
         )
+
+        # Get files for the pre-preceding day
+        prepreceding_day_file = os.path.join(
+            forecast_dir,
+            (forecast_date - timedelta(days=2)).strftime("%Y%m%d") + ".npy",
+        )
+        prepreceding_day_data = np.load(prepreceding_day_file)[0:1]
+
         # Get files for the preceding day
         preceding_day_file = os.path.join(
             forecast_dir,
@@ -217,12 +264,14 @@ def prepare_forcing(in_directory, out_directory, prefix, start_date, end_date):
 
         print(preceding_day_data.shape, current_forecast_data.shape)
 
+        prepreceding_day_data = prepreceding_day_data[:, :, :4]
         preceding_day_data = preceding_day_data[:, :, :4]
         current_forecast_data = current_forecast_data[:, :, :4]
 
         # Concatenate all data along the time axis
         concatenated_forcing = np.concatenate(
-            [preceding_day_data, current_forecast_data], axis=0
+            [prepreceding_day_data, preceding_day_data, current_forecast_data],
+            axis=0,
         )
 
         # Save concatenated data
@@ -303,12 +352,20 @@ def main():
                 args.start_date,
                 args.end_date,
             )
-        else:
+        elif args.data_dir.endswith("analysis"):
             prepare_states_with_boundary(
                 args.data_dir,
                 args.static_dir,
                 args.out_dir,
                 args.n_states,
+                args.prefix,
+                args.start_date,
+                args.end_date,
+            )
+        else:
+            prepare_forecast(
+                args.data_dir,
+                args.out_dir,
                 args.prefix,
                 args.start_date,
                 args.end_date,

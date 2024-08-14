@@ -261,6 +261,8 @@ def download_forecast(
 
     filename = f"{path_prefix}/{start_date.strftime('%Y%m%d')}.npy"
 
+    initial_date = start_date - timedelta(days=2)
+
     all_data = []
     for dataset_id, variables in datasets.items():
         # Load ocean physics dataset for all dates at once
@@ -270,7 +272,7 @@ def download_forecast(
             dataset_part="default",
             service="arco-geo-series",
             variables=variables,
-            start_datetime=start_date.strftime("%Y-%m-%dT00:00:00"),
+            start_datetime=initial_date.strftime("%Y-%m-%dT00:00:00"),
             end_datetime=end_date.strftime("%Y-%m-%dT00:00:00"),
             minimum_depth=constants.DEPTHS[0],
             maximum_depth=constants.DEPTHS[-1],

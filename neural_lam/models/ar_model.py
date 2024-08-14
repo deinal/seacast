@@ -27,10 +27,12 @@ class ARModel(pl.LightningModule):
         self.save_hyperparameters()
         self.optimizer = args.optimizer
         self.lr = args.lr
+        self.batch_size = args.batch_size
         self.epochs = args.epochs
         self.scheduler = args.scheduler
         self.initial_lr = args.initial_lr
         self.warmup_epochs = args.warmup_epochs
+        self.store_pred = args.store_pred
 
         # Load static features for grid/data
         static_data_dict = utils.load_static_data(args.dataset)
@@ -99,6 +101,9 @@ class ARModel(pl.LightningModule):
         # For storing spatial loss maps during evaluation
         self.spatial_loss_maps = []
 
+        # For storing predictions under sample names
+        self.sample_names = []
+
     def configure_optimizers(self):
         if self.optimizer == "adamw":
             opt = torch.optim.AdamW(
@@ -165,6 +170,12 @@ class ARModel(pl.LightningModule):
         Expand tensor with initial batch dimension
         """
         return x.unsqueeze(0).expand(batch_size, -1, -1)
+
+    def set_sample_names(self, dataset):
+        """
+        Set sample names for evaluation
+        """
+        self.sample_names = dataset.sample_names
 
     def predict_step(self, prev_state, prev_prev_state, forcing):
         """
@@ -393,6 +404,10 @@ class ARModel(pl.LightningModule):
         self.spatial_loss_maps.append(log_spatial_losses)
         # (B, N_log, num_grid_nodes)
 
+        # Store predictions
+        if self.store_pred:
+            self.store_predictions(batch_idx, prediction)
+
         # Plot example predictions (on rank 0 only)
         if (
             self.trainer.is_global_zero
@@ -405,6 +420,35 @@ class ARModel(pl.LightningModule):
 
             self.plot_examples(
                 batch, n_additional_examples, prediction=prediction
+            )
+
+    def store_predictions(self, batch_idx, prediction):
+        """
+        Store predictions for a batch
+
+        batch_idx: index of the batch in the dataloader
+        prediction: (B, pred_steps, num_grid_nodes, d_f), existing prediction.
+        """
+
+        sample_names = [
+            self.sample_names[idx]
+            for idx in range(
+                batch_idx * self.batch_size,
+                (batch_idx + 1) * self.batch_size,
+            )
+        ]
+
+        # Rescale to original data scale
+        prediction_rescaled = prediction * self.data_std + self.data_mean
+
+        pred_dir = os.path.join(wandb.run.dir, "predictions")
+        os.makedirs(pred_dir, exist_ok=True)
+
+        # Save pred as .npy files
+        for i, sample_name in enumerate(sample_names):
+            np.save(
+                os.path.join(pred_dir, f"{sample_name}.npy"),
+                prediction_rescaled[i].cpu().numpy(),
             )
 
     def plot_examples(self, batch, n_examples, prediction=None):

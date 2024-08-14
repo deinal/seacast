@@ -48,7 +48,11 @@ class WeatherDataset(torch.utils.data.Dataset):
             else (
                 "ana_data_*.npy"
                 if data_subset == "analysis"
-                else "*_data_*.npy"
+                else (
+                    "for_data_*.npy"
+                    if data_subset == "forecast" and split == "test"
+                    else "*_data_*.npy"
+                )
             )
         )
         sample_paths = glob.glob(

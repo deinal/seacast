@@ -185,7 +185,7 @@ def main():
     parser.add_argument(
         "--data_subset",
         type=str,
-        choices=["analysis", "reanalysis"],
+        choices=["analysis", "reanalysis", "forecast"],
         default=None,
         help="Type of data to use: 'analysis' or 'reanalysis' (default: None)",
     )
@@ -258,6 +258,12 @@ def main():
         default=1,
         help="Number of example predictions to plot during evaluation "
         "(default: 1)",
+    )
+    parser.add_argument(
+        "--store_pred",
+        type=int,
+        default=0,
+        help="Whether or not to store predictions (default: 0 (no))",
     )
     args = parser.parse_args()
 
@@ -391,6 +397,7 @@ def main():
                 shuffle=False,
                 num_workers=args.n_workers,
             )
+        model.set_sample_names(eval_loader.dataset)
 
         print(f"Running evaluation on {args.eval}")
         trainer.test(model=model, dataloaders=eval_loader)
