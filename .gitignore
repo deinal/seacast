@@ -8,7 +8,6 @@ graphs
 sweeps
 test_*.sh
 .ipynb_checkpoints
-*.ipynb
 *.out
 *.log
 *.sh

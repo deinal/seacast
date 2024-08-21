@@ -33,11 +33,11 @@ Complete set of packages can be installed with `pip install -r requirements.txt`
 3. Then download all the training data:
 ```
 python download_data.py -d reanalysis -s 1987-01-01 -e 2022-07-31
-python download_data.py -d analysis -s 2021-11-01 -e 2024-07-31
+python download_data.py -d analysis -s 2021-11-01 -e 2024-08-18
 python download_data.py -d era5 -s 1987-01-01 -e 2024-05-31
 ```
 
-4. Daily forecasts were fetched  with the ECMWF [open data client](https://pypi.org/project/ecmwf-opendata/) for the months of June and July 2024 using a cronjob:
+4. Daily forecasts were fetched  with the ECMWF [open data client](https://pypi.org/project/ecmwf-opendata/) for the months of July and August 2024 using a cronjob:
 ```
 0 21 * * * python download_data.py --forecast >> forecasts.log 2>&1
 ```
@@ -53,7 +53,7 @@ Mediterranean analysis
 ```
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2022-01-01 -e 2024-04-30
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-05-01 -e 2024-06-30
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 17 -p ana_data -s 2024-07-22 -e 2024-08-12 --forecast
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 17 -p ana_data -s 2024-07-22 -e 2024-08-18 --forecast
 ```
 
 ERA5
@@ -64,9 +64,9 @@ python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/sa
 
 Forecast data
 ```
-python prepare_states.py -d data/mediterranean/raw/forecast -o data/mediterranean/samples/test -p for_data -s 2024-07-24 -e 2024-08-01 --forecast
-python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-01 -e 2024-08-11 --forecast
-python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-06-01 -e 2024-08-11 --forecast
+python prepare_states.py -d data/mediterranean/raw/forecast -o data/mediterranean/samples/test -p for_data -s 2024-07-24 -e 2024-08-04 --forecast
+python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-24 -e 2024-08-04 --forecast
+python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-07-24 -e 2024-08-04 --forecast
 ```
 
 ### Create static features
@@ -131,6 +131,7 @@ For a full list of possible training options, check `python train_model.py --hel
 SeaCast was evaluated on 1 GPU using `--eval test`:
 ```
 python train_model.py \
+  --data_subset forecast \
   --forcing_prefix aifs_forcing \
   --n_workers 4 \
   --batch_size 1 \
@@ -140,6 +141,7 @@ python train_model.py \
   --processor_layers 4 \
   --hidden_dim 128 \
   --n_example_pred 1 \
+  --store_predictions 1 \
   --eval test \
   --load saved_models/hi_lam-4x128-06_26_19-6986/last.ckpt
 ```

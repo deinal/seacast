@@ -16,9 +16,7 @@ class WeatherDataset(torch.utils.data.Dataset):
     For our dataset:
     N_t' = 6
     N_t = 6//subsample_step (= 6 for 1 day steps)
-    dim_x = 774
-    dim_y = 763
-    N_grid = 147134
+    N_grid = 144990
     d_features = 75
     d_atm = 4
     d_forcing = 6
