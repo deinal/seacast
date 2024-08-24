@@ -51,7 +51,7 @@ PARAM_NAMES_SHORT = [
 PARAM_UNITS = [
     "m/s",
     "m/s",
-    "-",
+    "m",
     "‰",
     "m",
     "°C",
