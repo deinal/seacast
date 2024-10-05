@@ -59,8 +59,8 @@ PARAM_UNITS = [
 ]
 
 PARAM_COLORMAPS = [
-    "coolwarm",
-    "coolwarm",
+    "RdBu_r",
+    "RdBu_r",
     "viridis",
     "viridis",
     "viridis",

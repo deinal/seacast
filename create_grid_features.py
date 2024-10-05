@@ -61,8 +61,8 @@ def main():
     # Concatenate grid features
     grid_features = torch.cat(
         (coordinates, sea_depth, sea_topography), dim=1
-    )  # (N_grid_full, 3)
-    grid_features = grid_features[sea_mask]  # (N_grid, 3)
+    )  # (N_grid_full, 4)
+    grid_features = grid_features[sea_mask]  # (N_grid, 4)
 
     torch.save(grid_features, os.path.join(static_dir_path, "grid_features.pt"))
 
