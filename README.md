@@ -5,7 +5,7 @@
     <img src="figures/hi_graph.png" width="700">
 </p>
 
-The code is based on **Neural-LAM**: a repository of graph-based neural weather prediction models for limited area modeling. Reference [below](#neural-lam), and up-to-date developments for atmospheric modeling in the [original repo](https://github.com/mllam/neural-lam).
+The code is based on Neural-LAM: a repository of graph-based neural weather prediction models for limited area modeling. Up-to-date developments for atmospheric forecasting in the [original repo](https://github.com/mllam/neural-lam).
 
 The repository contains three meshgraphnet variations:
 
@@ -41,6 +41,26 @@ python download_data.py -d era5 -s 1987-01-01 -e 2024-05-31
 ```
 0 21 * * * python download_data.py --forecast >> forecasts.log 2>&1
 ```
+
+5. Satellite SST
+```
+import copernicusmarine as cm
+
+ds = cm.open_dataset(
+  dataset_id="SST_MED_SST_L4_NRT_OBSERVATIONS_010_004_a_V2",
+  variables=["analysed_sst"],
+  minimum_longitude=-6,
+  maximum_longitude=36.25,
+  minimum_latitude=30.25,
+  maximum_latitude=46,
+  start_datetime="2024-07-24T00:00:00",
+  end_datetime="2024-08-20T23:59:59",
+)
+
+ds.to_netcdf("data/mediterranean/samples/test/sst.nc")
+```
+
+6. Observations manually downloaded from https://doi.org/10.48670/moi-00044
 
 ### State preparation
 
@@ -205,16 +225,3 @@ GitHub actions are implemented for code checks. Run before commits:
 pre-commit run --all-files
 ```
 from the root directory of the repository.
-
-## Cite
-
-### Neural-LAM
-
-```
-@inproceedings{oskarsson2023graphbased,
-    title={Graph-based Neural Weather Prediction for Limited Area Modeling},
-    author={Oskarsson, Joel and Landelius, Tomas and Lindsten, Fredrik},
-    booktitle={NeurIPS 2023 Workshop on Tackling Climate Change with Machine Learning},
-    year={2023}
-}
-```
