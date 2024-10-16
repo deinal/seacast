@@ -1,6 +1,8 @@
 
 # SeaCast
 
+[![arXiv](https://img.shields.io/badge/arXiv-2410.11807-b31b1b.svg)](https://arxiv.org/abs/2410.11807) [![zenodo](https://img.shields.io/badge/zenodo-13894915-green.svg)](https://zenodo.org/records/13894915)
+
 <p align="middle">
     <img src="figures/hi_graph.png" width="700">
 </p>
@@ -37,10 +39,11 @@ python download_data.py -d analysis -s 2021-11-01 -e 2024-08-18
 python download_data.py -d era5 -s 1987-01-01 -e 2024-05-31
 ```
 
-4. Daily forecasts were fetched  with the ECMWF [open data client](https://pypi.org/project/ecmwf-opendata/) for the months of July and August 2024 using a cronjob:
+4. Daily forecasts were fetched  with the ECMWF [open data client](https://pypi.org/project/ecmwf-opendata/) and CMEMS python client for the months of July and August 2024 using a cronjob:
 ```
 0 21 * * * python download_data.py --forecast >> forecasts.log 2>&1
 ```
+Evaluation data + predicted fields are stored on Zenodo (https://zenodo.org/records/13894915).
 
 5. Satellite SST
 ```
@@ -225,3 +228,14 @@ GitHub actions are implemented for code checks. Run before commits:
 pre-commit run --all-files
 ```
 from the root directory of the repository.
+
+## Cite
+
+```
+@inproceedings{holmberg2024regional,
+    title={Regional Ocean Forecasting with Hierarchical Graph Neural Networks},
+    author={Holmberg, Daniel and Clementi, Emanuela and Roos, Teemu},
+    booktitle={NeurIPS 2024 Workshop on Tackling Climate Change with Machine Learning},
+    year={2024}
+}
+```
