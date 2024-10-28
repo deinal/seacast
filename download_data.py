@@ -107,11 +107,25 @@ def download_static(path_prefix, mask):
     np.save(f"{path_prefix}/sea_mask.npy", sea_mask)
 
     # Forcing mask for the Strait of Gibraltar
-    border_mask = np.where(
+    border_mask_gibraltar = np.where(
         bathy_data.mask.longitude < -5.2, bathy_data.mask, np.nan
     )
-    border_mask = ~np.isnan(border_mask)
-    np.save(f"{path_prefix}/boundary_mask.npy", border_mask)
+
+    # Forcing mask for the Dardanelles Strait
+    border_mask_dardanelles = bathy_data.mask.where(
+        (bathy_data.latitude >= 39.9)
+        & (bathy_data.latitude <= 40.2)
+        & (bathy_data.longitude >= 26)
+        & (bathy_data.longitude <= 26.3),
+        other=np.nan,
+    )
+
+    # Combine both border masks
+    combined_border_mask = np.where(
+        ~np.isnan(border_mask_gibraltar), True, False
+    ) | np.where(~np.isnan(border_mask_dardanelles), True, False)
+
+    np.save(f"{path_prefix}/boundary_mask.npy", combined_border_mask)
 
     y_indices, x_indices = np.indices(sea_mask.shape[1:])
     nwp_xy = np.stack([x_indices, y_indices])
@@ -567,9 +581,6 @@ def main():
         }
         version = "202012"
 
-        # start_date = datetime(1987, 1, 1)
-        # end_date = datetime(2022, 7, 31)
-
         download_data(
             start_date,
             end_date,
@@ -589,9 +600,6 @@ def main():
             "cmems_mod_med_phy-tem_anfc_4.2km_P1D-m": ["thetao", "bottomT"],
         }
         version = "202311"
-
-        # start_date = datetime(2021, 11, 1)
-        # end_date = datetime(2024, 5, 25)
 
         download_data(
             start_date,

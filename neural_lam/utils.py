@@ -93,7 +93,7 @@ def load_static_data(dataset_name, device="cpu"):
     # Mask for the surface grid
     surface_mask_np = sea_mask_np[0]
 
-    # Grid mask for all depth levels to be multiplied with output states
+    # Boundary mask for all depth levels to be multiplied with output states
     boundary_mask = torch.tensor(
         boundary_mask_np[:, surface_mask_np],
         dtype=torch.float32,

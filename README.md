@@ -18,8 +18,8 @@ The repository contains three meshgraphnet variations:
 ## Dependencies
 
 SeaCast was trained using Python 3.10 and
-- `torch==2.2.2`
-- `pytorch-lightning==2.2.0`
+- `torch==2.4.1`
+- `pytorch-lightning==2.4.0`
 - `torch_geometric==2.5.3`
 
 Complete set of packages can be installed with `pip install -r requirements.txt`.
@@ -34,7 +34,7 @@ Complete set of packages can be installed with `pip install -r requirements.txt`
 
 3. Then download all the training data:
 ```
-python download_data.py -d reanalysis -s 1987-01-01 -e 2022-07-31
+python download_data.py -d reanalysis -s 1987-01-01 -e 2022-07-31 --static
 python download_data.py -d analysis -s 2021-11-01 -e 2024-08-18
 python download_data.py -d era5 -s 1987-01-01 -e 2024-05-31
 ```
@@ -74,15 +74,15 @@ python prepare_states.py -d data/mediterranean/raw/reanalysis -o data/mediterran
 
 Mediterranean analysis
 ```
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2022-01-01 -e 2024-04-30
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-05-01 -e 2024-06-30
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2022-01-01 -e 2023-12-31
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-01-01 -e 2024-06-30
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 17 -p ana_data -s 2024-07-22 -e 2024-08-18 --forecast
 ```
 
 ERA5
 ```
-python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/train -n 6 -p forcing -s 1987-01-01 -e 2024-04-30
-python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/val -n 6 -p forcing -s 2024-05-01 -e 2024-06-30
+python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/train -n 6 -p forcing -s 1987-01-01 -e 2023-12-31
+python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/samples/val -n 6 -p forcing -s 2024-01-01 -e 2024-06-30
 ```
 
 Forecast data
@@ -164,7 +164,7 @@ python train_model.py \
   --processor_layers 4 \
   --hidden_dim 128 \
   --n_example_pred 1 \
-  --store_predictions 1 \
+  --store_pred 1 \
   --eval test \
   --load saved_models/hi_lam-4x128-06_26_19-6986/last.ckpt
 ```

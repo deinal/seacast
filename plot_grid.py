@@ -69,9 +69,11 @@ def create_3d_scatter_plot(mask, show_axis):
             print(mpl.colors.to_hex(b))
 
     colors = []
-    for depth, lon, blue in zip(depths_valid, lons_valid, blues):
+    for depth, lat, lon, blue in zip(depths_valid, lats_valid, lons_valid, blues):
         if lon < -5.2:
-            colors.append("maroon")
+            colors.append("maroon") # Gibraltar
+        elif (lat > 39.9) and (lat < 40.2) and (lon > 26) and (lon < 26.3):
+            colors.append("maroon") # Dardanelles
         elif depth == min_depth:
             colors.append("seagreen")
         else:
@@ -138,7 +140,7 @@ def main():
     parser.add_argument("--save", type=str, help="Filename to save as")
     args = parser.parse_args()
 
-    mask = load_mask(args.path)
+    mask = load_mask(args.mask)
     fig = create_3d_scatter_plot(mask, args.show_axis)
 
     if args.save:
