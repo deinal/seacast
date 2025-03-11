@@ -17,7 +17,7 @@ class WeatherDataset(torch.utils.data.Dataset):
     N_t' = 6
     N_t = 6//subsample_step (= 6 for 1 day steps)
     N_grid = 144990
-    d_features = 75
+    d_features = 73
     d_atm = 4
     d_forcing = 6
     """
@@ -32,6 +32,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         subset=False,
         data_subset=None,
         forcing_prefix="forcing",
+        start_date=None,
     ):
         super().__init__()
 
@@ -59,10 +60,20 @@ class WeatherDataset(torch.utils.data.Dataset):
         if split == "test":
             sample_paths = sorted(sample_paths)
         self.sample_names = [path.split("/")[-1][:-4] for path in sample_paths]
-        # Now on form "yyymmdd"
+        # Now in the form "yyyymmdd"
+
+        # Filter samples based on start_date if provided
+        if start_date is not None:
+            start_date = dt.datetime.strptime(start_date, "%Y%m%d")
+            self.sample_names = [
+                name
+                for name in self.sample_names
+                if dt.datetime.strptime(name[-8:], "%Y%m%d") >= start_date
+            ]
+            print(self.sample_names)
 
         if subset:
-            self.sample_names = self.sample_names[:20]  # Limit to 10 samples
+            self.sample_names = self.sample_names[:10]  # Limit to 10 samples
 
         self.sample_length = pred_length + 2  # 2 init states
         self.subsample_step = subsample_step

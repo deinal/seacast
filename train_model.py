@@ -197,6 +197,12 @@ def main():
         help="Type of data to use: 'analysis' or 'reanalysis' (default: None)",
     )
     parser.add_argument(
+        "--start_date",
+        type=str,
+        default=None,
+        help="Cutoff date to start training from (default: None)",
+    )
+    parser.add_argument(
         "--forcing_prefix",
         type=str,
         choices=["forcing", "ens_forcing", "aifs_forcing"],
@@ -299,6 +305,7 @@ def main():
             subset=bool(args.subset_ds),
             data_subset=args.data_subset,
             forcing_prefix=args.forcing_prefix,
+            start_date=args.start_date,
         ),
         args.batch_size,
         shuffle=True,
