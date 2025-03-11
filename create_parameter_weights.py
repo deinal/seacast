@@ -49,7 +49,17 @@ def main():
         0
     )  # 1, 1, N_grid, d_features
 
+    # Create parameter weights based on depth
     w_list = np.ones(len(constants.EXP_PARAM_NAMES_SHORT))
+    depth_weights = [(200 - depth) for depth in constants.DEPTHS]
+    depth_weights = [w / sum(depth_weights) for w in depth_weights]
+    w_dict = dict(zip([round(d) for d in constants.DEPTHS], depth_weights))
+    for i, par in enumerate(constants.EXP_PARAM_NAMES_SHORT):
+        if "_" in par:
+            weight = w_dict[int(par.split("_")[-1])]
+        else:
+            weight = 1
+        w_list[i] = weight
     print("Saving parameter weights...")
     np.save(
         os.path.join(static_dir_path, "parameter_weights.npy"),
