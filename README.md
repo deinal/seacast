@@ -35,8 +35,8 @@ Complete set of packages can be installed with `pip install -r requirements.txt`
 3. Then download all the training data:
 ```
 python download_data.py -d reanalysis -s 1987-01-01 -e 2022-07-31 --static
-python download_data.py -d analysis -s 2021-11-01 -e 2024-08-18
-python download_data.py -d era5 -s 1987-01-01 -e 2024-05-31
+python download_data.py -d analysis -s 2021-11-01 -e 2025-01-14
+python download_data.py -d era5 -s 1987-01-01 -e 2024-06-30
 ```
 
 4. Daily forecasts were fetched  with the ECMWF [open data client](https://pypi.org/project/ecmwf-opendata/) and CMEMS python client for the months of July and August 2024 using a cronjob:
@@ -76,7 +76,7 @@ Mediterranean analysis
 ```
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/train -n 6 -p ana_data -s 2022-01-01 -e 2023-12-31
 python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/val -n 6 -p ana_data -s 2024-01-01 -e 2024-06-30
-python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 17 -p ana_data -s 2024-07-22 -e 2024-08-18 --forecast
+python prepare_states.py -d data/mediterranean/raw/analysis -o data/mediterranean/samples/test -n 17 -p ana_data -s 2024-07-01 -e 2024-01-14 --forecast
 ```
 
 ERA5
@@ -87,9 +87,9 @@ python prepare_states.py -d data/mediterranean/raw/era5 -o data/mediterranean/sa
 
 Forecast data
 ```
-python prepare_states.py -d data/mediterranean/raw/forecast -o data/mediterranean/samples/test -p for_data -s 2024-07-24 -e 2024-08-04 --forecast
-python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-24 -e 2024-08-04 --forecast
-python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-07-24 -e 2024-08-04 --forecast
+python prepare_states.py -d data/mediterranean/raw/forecast -o data/mediterranean/samples/test -p for_data -s 2024-07-03 -e 2024-12-31 --forecast
+python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/samples/test -p ens_forcing -s 2024-07-03 -e 2024-12-31 --forecast
+python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-07-03 -e 2024-12-31 --forecast
 ```
 
 ### Create static features
@@ -137,7 +137,7 @@ python train_model.py \
   --step_length 1 \
   --ar_steps 4 \
   --lr 0.001 \
-  --optimizer momo_adam \
+  --optimizer adamw \
   --scheduler cosine \
   --finetune_start 0.6 \
   --model hi_lam \

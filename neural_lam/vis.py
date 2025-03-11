@@ -70,6 +70,7 @@ def plot_prediction(
     obs_mask,
     title=None,
     colormap="viridis",
+    diverging=False,
     vrange=None,
 ):
     """
@@ -85,6 +86,10 @@ def plot_prediction(
         vmax = max(vals.max().cpu().item() for vals in (pred, target))
     else:
         vmin, vmax = vrange
+
+    if diverging:
+        limit = max(abs(vmin), abs(vmax))
+        vmin, vmax = -limit, limit
 
     # Map pred and target back onto the full grid
     obs_mask = obs_mask.cpu().numpy()

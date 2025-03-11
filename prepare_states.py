@@ -78,7 +78,7 @@ def prepare_states_with_boundary(
     end_date,
 ):
     """
-    Concatenat analysis states and include forecast boundary.
+    Concatenate analysis states and include forecast boundary.
 
     Args:
         in_directory (str): Directory containing the analysis .npy files.

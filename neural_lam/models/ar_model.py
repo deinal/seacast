@@ -508,18 +508,21 @@ class ARModel(pl.LightningModule):
                         title=f"{var_name} ({var_unit}), "
                         f"t={t_i} ({self.step_length*t_i} d)",
                         colormap=colormap,
+                        diverging=diverging,
                         vrange=var_vrange,
                     )
                     for var_i, (
                         var_name,
                         var_unit,
                         colormap,
+                        diverging,
                         var_vrange,
                     ) in enumerate(
                         zip(
                             constants.EXP_PARAM_NAMES_SHORT,
                             constants.EXP_PARAM_UNITS,
                             constants.EXP_PARAM_COLORMAPS,
+                            constants.EXP_DIVERGING,
                             var_vranges,
                         )
                     )

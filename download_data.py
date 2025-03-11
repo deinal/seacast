@@ -115,7 +115,7 @@ def download_static(path_prefix, mask):
     border_mask_dardanelles = bathy_data.mask.where(
         (bathy_data.latitude >= 39.9)
         & (bathy_data.latitude <= 40.2)
-        & (bathy_data.longitude >= 26)
+        & (bathy_data.longitude >= 25.7)
         & (bathy_data.longitude <= 26.3),
         other=np.nan,
     )
@@ -228,8 +228,6 @@ def download_data(
                 dataset = month_data[dataset_id]
                 for var in datasets[dataset_id]:
                     daily_data = dataset[var].isel(time=day).values
-                    if var == "bottomT":
-                        daily_data = daily_data[:, :, 0]
                     if len(daily_data.shape) == 2:
                         daily_data = daily_data[np.newaxis, ...]
                     daily_data = daily_data.transpose(1, 2, 0)  # h, w, f
@@ -295,8 +293,6 @@ def download_forecast(
         dataset = select(dataset, mask)
         for var in variables:
             data = dataset[var].values
-            if var == "bottomT":
-                data = data[:, :, :, 0]
             if len(data.shape) == 3:
                 data = data[:, np.newaxis, ...]  # t, 1, h, w
             data = data.transpose(0, 2, 3, 1)  # t, h, w, f
@@ -574,10 +570,9 @@ def main():
     if args.data_source == "reanalysis":
         datasets = {
             "med-cmcc-cur-rean-d": ["uo", "vo"],
-            "med-cmcc-mld-rean-d": ["mlotst"],
             "med-cmcc-sal-rean-d": ["so"],
+            "med-cmcc-tem-rean-d": ["thetao"],
             "med-cmcc-ssh-rean-d": ["zos"],
-            "med-cmcc-tem-rean-d": ["thetao", "bottomT"],
         }
         version = "202012"
 
@@ -594,10 +589,9 @@ def main():
     if args.data_source == "analysis":
         datasets = {
             "cmems_mod_med_phy-cur_anfc_4.2km_P1D-m": ["uo", "vo"],
-            "cmems_mod_med_phy-mld_anfc_4.2km_P1D-m": ["mlotst"],
             "cmems_mod_med_phy-sal_anfc_4.2km_P1D-m": ["so"],
+            "cmems_mod_med_phy-tem_anfc_4.2km_P1D-m": ["thetao"],
             "cmems_mod_med_phy-ssh_anfc_4.2km_P1D-m": ["zos"],
-            "cmems_mod_med_phy-tem_anfc_4.2km_P1D-m": ["thetao", "bottomT"],
         }
         version = "202311"
 
@@ -634,10 +628,9 @@ def main():
     if args.forecast:
         datasets = {
             "cmems_mod_med_phy-cur_anfc_4.2km_P1D-m": ["uo", "vo"],
-            "cmems_mod_med_phy-mld_anfc_4.2km_P1D-m": ["mlotst"],
             "cmems_mod_med_phy-sal_anfc_4.2km_P1D-m": ["so"],
+            "cmems_mod_med_phy-tem_anfc_4.2km_P1D-m": ["thetao"],
             "cmems_mod_med_phy-ssh_anfc_4.2km_P1D-m": ["zos"],
-            "cmems_mod_med_phy-tem_anfc_4.2km_P1D-m": ["thetao", "bottomT"],
         }
         version = "202311"
 

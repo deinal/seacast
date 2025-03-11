@@ -1,5 +1,6 @@
 # Third-party
 import cartopy
+import cmocean
 import numpy as np
 
 WANDB_PROJECT = "seacast"
@@ -31,49 +32,47 @@ VAR_LEADS_METRICS_WATCH = {}
 PARAM_NAMES = [
     "Eastward sea water velocity",
     "Northward sea water velocity",
-    "Ocean mixed layer thickness defined by sigma theta",
     "Sea water salinity",
-    "Sea surface height above geoid",
     "Sea water potential temperature",
-    "Sea water potential temperature at sea floor",
+    "Sea surface height above geoid",
 ]
 
 PARAM_NAMES_SHORT = [
     "uo",
     "vo",
-    "mlotst",
     "so",
-    "zos",
     "thetao",
-    "bottomT",
+    "zos",
 ]
 
 PARAM_UNITS = [
     "m/s",
     "m/s",
-    "m",
-    "‰",
-    "m",
+    "psu",
     "°C",
-    "°C",
+    "m",
 ]
 
 PARAM_COLORMAPS = [
-    "RdBu_r",
-    "RdBu_r",
-    "viridis",
-    "viridis",
-    "viridis",
-    "viridis",
-    "viridis",
+    cmocean.cm.balance,
+    cmocean.cm.balance,
+    cmocean.cm.haline,
+    cmocean.cm.thermal,
+    cmocean.cm.curl,
+]
+
+DIVERGING = [
+    True,
+    True,
+    False,
+    False,
+    True,
 ]
 
 LEVELS = [
     True,
     True,
-    False,
     True,
-    False,
     True,
     False,
 ]
@@ -85,7 +84,7 @@ PROJECTION = cartopy.crs.PlateCarree()
 
 # Data dimensions
 GRID_FORCING_DIM = 6 * 3  # 6 feat. for 3 time-step window + 0 batch-static
-GRID_STATE_DIM = 75
+GRID_STATE_DIM = 73
 
 DEPTHS = [
     1.0182366,
@@ -110,20 +109,31 @@ DEPTHS = [
 
 
 # New lists
+EXP_PARAM_NAMES = []
 EXP_PARAM_NAMES_SHORT = []
 EXP_PARAM_UNITS = []
 EXP_PARAM_COLORMAPS = []
+EXP_DIVERGING = []
 
-for name, unit, colormap, levels_applies in zip(
-    PARAM_NAMES_SHORT, PARAM_UNITS, PARAM_COLORMAPS, LEVELS
+for name, short_name, unit, colormap, diverging, levels_applies in zip(
+    PARAM_NAMES,
+    PARAM_NAMES_SHORT,
+    PARAM_UNITS,
+    PARAM_COLORMAPS,
+    DIVERGING,
+    LEVELS,
 ):
     if levels_applies:
         for depth in DEPTHS:
             depth_int = round(depth)
-            EXP_PARAM_NAMES_SHORT.append(f"{name}_{depth_int}")
+            EXP_PARAM_NAMES.append(f"{name}_{depth_int}")
+            EXP_PARAM_NAMES_SHORT.append(f"{short_name}_{depth_int}")
             EXP_PARAM_UNITS.append(unit)
             EXP_PARAM_COLORMAPS.append(colormap)
+            EXP_DIVERGING.append(diverging)
     else:
-        EXP_PARAM_NAMES_SHORT.append(name)
+        EXP_PARAM_NAMES.append(name)
+        EXP_PARAM_NAMES_SHORT.append(short_name)
         EXP_PARAM_UNITS.append(unit)
         EXP_PARAM_COLORMAPS.append(colormap)
+        EXP_DIVERGING.append(diverging)

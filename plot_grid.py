@@ -69,11 +69,13 @@ def create_3d_scatter_plot(mask, show_axis):
             print(mpl.colors.to_hex(b))
 
     colors = []
-    for depth, lat, lon, blue in zip(depths_valid, lats_valid, lons_valid, blues):
+    for depth, lat, lon, blue in zip(
+        depths_valid, lats_valid, lons_valid, blues
+    ):
         if lon < -5.2:
-            colors.append("maroon") # Gibraltar
-        elif (lat > 39.9) and (lat < 40.2) and (lon > 26) and (lon < 26.3):
-            colors.append("maroon") # Dardanelles
+            colors.append("maroon")  # Gibraltar
+        elif 39.9 < lat < 40.2 and 25.7 < lon < 26.3:
+            colors.append("maroon")  # Dardanelles
         elif depth == min_depth:
             colors.append("seagreen")
         else:
