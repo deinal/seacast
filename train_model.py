@@ -166,6 +166,13 @@ def main():
         "output dimensions "
         "(default: 0 (no))",
     )
+    parser.add_argument(
+        "--vertical_propnets",
+        type=int,
+        default=1,
+        help="If PropagationNets should be used for all vertical message "
+        "passing (g2m, m2g, up in hierarchy) (default: 0 (no))",
+    )
 
     # Training options
     parser.add_argument(

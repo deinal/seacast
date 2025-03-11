@@ -2,7 +2,7 @@
 from torch import nn
 
 # First-party
-from neural_lam.interaction_net import InteractionNet
+from neural_lam.interaction_net import InteractionNet, PropagationNet
 from neural_lam.models.base_hi_graph_model import BaseHiGraphModel
 
 
@@ -51,9 +51,10 @@ class HiLAM(BaseHiGraphModel):
         """
         Make GNNs for processing steps up through the hierarchy.
         """
+        gnn_class = PropagationNet if args.vertical_propnets else InteractionNet
         return nn.ModuleList(
             [
-                InteractionNet(
+                gnn_class(
                     edge_index,
                     args.hidden_dim,
                     hidden_layers=args.hidden_layers,
