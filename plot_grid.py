@@ -74,7 +74,7 @@ def create_3d_scatter_plot(mask, show_axis):
     ):
         if lon < -5.2:
             colors.append("maroon")  # Gibraltar
-        elif 39.9 < lat < 40.2 and 25.7 < lon < 26.3:
+        elif 39.9 < lat < 40.4 and 25.9 < lon < 26.4:
             colors.append("maroon")  # Dardanelles
         elif depth == min_depth:
             colors.append("seagreen")

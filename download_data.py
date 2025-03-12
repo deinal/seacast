@@ -114,9 +114,9 @@ def download_static(path_prefix, mask):
     # Forcing mask for the Dardanelles Strait
     border_mask_dardanelles = bathy_data.mask.where(
         (bathy_data.latitude >= 39.9)
-        & (bathy_data.latitude <= 40.2)
-        & (bathy_data.longitude >= 25.7)
-        & (bathy_data.longitude <= 26.3),
+        & (bathy_data.latitude <= 40.4)
+        & (bathy_data.longitude >= 25.9)
+        & (bathy_data.longitude <= 26.4),
         other=np.nan,
     )
 
