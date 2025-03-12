@@ -92,6 +92,11 @@ python prepare_states.py -d data/mediterranean/raw/ens -o data/mediterranean/sam
 python prepare_states.py -d data/mediterranean/raw/aifs -o data/mediterranean/samples/test -p aifs_forcing -s 2024-07-03 -e 2024-12-31 --forecast
 ```
 
+Compute wind stress components from wind velocity components
+```
+python compute_wind_stress.py
+```
+
 ### Create static features
 
 ```
