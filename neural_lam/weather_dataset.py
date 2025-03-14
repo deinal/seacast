@@ -33,6 +33,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         data_subset=None,
         forcing_prefix="forcing",
         start_date=None,
+        permute_forcing=None,
     ):
         super().__init__()
 
@@ -43,10 +44,10 @@ class WeatherDataset(torch.utils.data.Dataset):
 
         member_file_regexp = (
             "rea_data_*.npy"
-            if data_subset == "reanalysis"
+            if data_subset == "reanalysis" and split == "train"
             else (
                 "ana_data_*.npy"
-                if data_subset == "analysis"
+                if data_subset == "analysis" and split == "train"
                 else (
                     "for_data_*.npy"
                     if data_subset == "forecast" and split == "test"
@@ -70,7 +71,6 @@ class WeatherDataset(torch.utils.data.Dataset):
                 for name in self.sample_names
                 if dt.datetime.strptime(name[-8:], "%Y%m%d") >= start_date
             ]
-            print(self.sample_names)
 
         if subset:
             self.sample_names = self.sample_names[:10]  # Limit to 10 samples
@@ -107,6 +107,8 @@ class WeatherDataset(torch.utils.data.Dataset):
         self.random_subsample = False
 
         self.forcing_prefix = forcing_prefix
+
+        self.permute_forcing = permute_forcing
 
     def update_pred_length(self, new_length):
         """
@@ -169,6 +171,18 @@ class WeatherDataset(torch.utils.data.Dataset):
         atm_forcing = torch.tensor(
             np.load(forcing_path), dtype=torch.float32
         )  # (N_t', N_grid, d_atm)
+
+        # Whether to randomly permute atm forcing during evaluation
+        if self.permute_forcing is not None:
+            for var in self.permute_forcing:
+                print(f"Randomizing {var}")
+                atm_idx = constants.ATM_FORCING.index(var)
+                # Randomize the given feature over grid dimension
+                for t in range(atm_forcing.shape[0]):
+                    grid_perm = torch.randperm(atm_forcing.shape[1])
+                    atm_forcing[t, :, atm_idx] = atm_forcing[
+                        t, grid_perm, atm_idx
+                    ]
 
         if self.standardize:
             atm_forcing = (atm_forcing - self.forcing_mean) / self.forcing_std

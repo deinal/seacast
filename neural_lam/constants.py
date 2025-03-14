@@ -107,6 +107,7 @@ DEPTHS = [
     192.48314,
 ]
 
+ATM_FORCING = ["tau_u", "tau_v", "t2m", "msl"]
 
 # New lists
 EXP_PARAM_NAMES = []

@@ -77,6 +77,12 @@ def main():
         "(default: 0=false)",
     )
     parser.add_argument(
+        "--run_id",
+        type=str,
+        default=None,
+        help="Specify a deterministic run id (default: None)",
+    )
+    parser.add_argument(
         "--seed", type=int, default=42, help="random seed (default: 42)"
     )
     parser.add_argument(
@@ -171,7 +177,7 @@ def main():
         type=int,
         default=1,
         help="If PropagationNets should be used for all vertical message "
-        "passing (g2m, m2g, up in hierarchy) (default: 0 (no))",
+        "passing (g2m, m2g, up in hierarchy) (default: 1 (yes))",
     )
 
     # Training options
@@ -278,6 +284,14 @@ def main():
         default=0,
         help="Whether or not to store predictions (default: 0 (no))",
     )
+    parser.add_argument(
+        "--permute_forcing",
+        type=str,
+        nargs="*",
+        choices=["tau_u", "tau_v", "t2m", "msl"],
+        default=None,
+        help="List of atmospheric forcing feature to permute (default: [])",
+    )
     args = parser.parse_args()
 
     # Asserts for arguments
@@ -289,8 +303,11 @@ def main():
         "test",
     ), f"Unknown eval setting: {args.eval}"
 
-    # Get an (actual) random run id as a unique identifier
-    random_run_id = random.randint(0, 9999)
+    # Get a run id as a unique identifier
+    run_id = (
+        args.run_id
+        or f"{time.strftime('%m_%d_%H')}-{random.randint(0, 9999):04d}"
+    )
 
     # Set seed
     seed.seed_everything(args.seed)
@@ -339,6 +356,7 @@ def main():
     # Load model parameters Use new args for model
     model_class = MODELS[args.model]
     if args.load:
+        print(f"Loading from checkpoint {args.load}")
         model = model_class.load_from_checkpoint(args.load, args=args)
         if args.restore_opt:
             # Save for later
@@ -352,7 +370,7 @@ def main():
         prefix = prefix + f"eval-{args.eval}-"
     run_name = (
         f"{prefix}{args.model}-{args.processor_layers}x{args.hidden_dim}-"
-        f"{time.strftime('%m_%d_%H')}-{random_run_id:04d}"
+        f"{run_id}"
     )
     checkpoint_dir = f"saved_models/{run_name}"
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -406,6 +424,7 @@ def main():
                     subset=bool(args.subset_ds),
                     data_subset=args.data_subset,
                     forcing_prefix=args.forcing_prefix,
+                    permute_forcing=args.permute_forcing,
                 ),
                 args.batch_size,
                 shuffle=False,

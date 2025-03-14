@@ -23,7 +23,7 @@ def compute_wind_stress(u_a, v_a, temp_a, temp_s, rho_a=1.2):
         rho_a: Air density (kg/m^3), default 1.2.
 
     Returns:
-        tau_x, tau_y: Wind stress components (N/m^2)
+        tau_u, tau_v: Wind stress components (N/m^2)
     """
     m = np.sqrt(u_a**2 + v_a**2)
     delta_temp = temp_a - temp_s
@@ -70,11 +70,11 @@ def process_forcing(sim_file, forcing_file):
     t2m = forcing_data[..., 2]
 
     # Compute wind stress (tau_x, tau_y)
-    tau_x, tau_y = compute_wind_stress(u10, v10, t2m, sst)
+    tau_u, tau_v = compute_wind_stress(u10, v10, t2m, sst)
 
     # Replace u10 and v10 in the forcing file with wind stress components
-    forcing_data[..., 0] = tau_x
-    forcing_data[..., 1] = tau_y
+    forcing_data[..., 0] = tau_u
+    forcing_data[..., 1] = tau_v
 
     # Create new filename (here replace current file)
     directory = os.path.dirname(forcing_file)
