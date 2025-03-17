@@ -33,6 +33,8 @@ class ARModel(pl.LightningModule):
         self.initial_lr = args.initial_lr
         self.warmup_epochs = args.warmup_epochs
         self.store_pred = args.store_pred
+        self.dataset = args.dataset
+        self.run_id = args.run_id
 
         # Load static features for grid/data
         static_data_dict = utils.load_static_data(args.dataset)
@@ -441,7 +443,13 @@ class ARModel(pl.LightningModule):
         # Rescale to original data scale
         prediction_rescaled = prediction * self.data_std + self.data_mean
 
-        pred_dir = os.path.join(wandb.run.dir, "predictions")
+        if self.run_id is None:
+            pred_dir = os.path.join(wandb.run.dir, "predictions")
+        else:
+            pred_dir = os.path.join(
+                "data", self.dataset, "predictions", self.run_id
+            )
+
         os.makedirs(pred_dir, exist_ok=True)
 
         # Save pred as .npy files
