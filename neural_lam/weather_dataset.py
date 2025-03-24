@@ -47,7 +47,7 @@ class WeatherDataset(torch.utils.data.Dataset):
             if data_subset == "reanalysis" and split == "train"
             else (
                 "ana_data_*.npy"
-                if data_subset == "analysis" and split == "train"
+                if data_subset == "analysis"
                 else (
                     "for_data_*.npy"
                     if data_subset == "forecast" and split == "test"
