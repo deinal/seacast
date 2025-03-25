@@ -1,4 +1,3 @@
-# pylint: disable=too-many-lines,too-many-branches,too-many-statements
 # Standard library
 import argparse
 import json
@@ -362,7 +361,7 @@ def plot_forecast_vertical(
         ax_fc.xaxis.set_major_formatter(x_formatter)
 
         fig.colorbar(
-            im_fc, ax=ax_fc, orientation="vertical", fraction=0.046, pad=0.04
+            im_fc, ax=ax_fc, orientation="vertical", shrink=0.7, pad=0.02
         )
 
         # Bias panel
@@ -390,8 +389,8 @@ def plot_forecast_vertical(
             im_bias,
             ax=ax_bias,
             orientation="vertical",
-            fraction=0.046,
-            pad=0.04,
+            shrink=0.7,
+            pad=0.02,
         )
 
     save_dir = os.path.join("figures", "metrics", "forecast_vertical")
@@ -483,7 +482,12 @@ def plot_group_bias(var, model, sea_mask, dataset="mediterranean"):
     else:
         extend = "neither"
     cbar = fig.colorbar(
-        pcm, ax=axes, orientation="vertical", shrink=0.6, extend=extend
+        pcm,
+        ax=axes,
+        orientation="vertical",
+        shrink=0.6,
+        extend=extend,
+        pad=0.02,
     )
     cbar.set_label(f"Bias ({unit})", fontsize=10)
 
@@ -575,7 +579,7 @@ def plot_metric_by_depth(
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
-        figsize=(ncols * 3, nrows * 3),
+        figsize=(ncols * 2.9, nrows * 2.7),
         sharex=True,
         constrained_layout=True,
     )
@@ -588,6 +592,7 @@ def plot_metric_by_depth(
         row_index = i // ncols
         col_index = i % ncols
         for model, (metric_matrix, ci_data) in metric_std_all.items():
+            ax.axvline(x=10, color="lightgray", ls="--", zorder=0)
             # Get metric values for all lead times at this depth
             y = metric_matrix[:, sorted_var_indices[i]]
             if fill_between:
@@ -614,12 +619,8 @@ def plot_metric_by_depth(
                     label=model_labels.get(model, model),
                 )
 
-        # Set minor ticks at every step
         ax.set_xticks(np.arange(1, n_steps + 1), minor=True)
-        # Set major ticks at every 5th step
-        major_ticks = np.unique(
-            np.concatenate(([1], np.arange(5, n_steps + 1, 5)))
-        )
+        major_ticks = range(1, 16, 2)
         ax.set_xticks(major_ticks, minor=False)
         ax.set_xticklabels(major_ticks)
 
@@ -674,6 +675,7 @@ def plot_metric_single(
 
     x = np.arange(1, n_steps + 1)
     plt.figure(figsize=(6, 5))
+    plt.axvline(x=10, color="lightgray", ls="--", zorder=0)
     for model, (metric_matrix, ci_data) in metric_std_all.items():
         y = metric_matrix[:, var_idx]
         if fill_between:
@@ -706,10 +708,8 @@ def plot_metric_single(
         plt.ylabel(metric.upper(), fontsize=fs)
 
     ax = plt.gca()
-    # Set minor ticks on every step
     ax.set_xticks(np.arange(1, n_steps + 1), minor=True)
-    # Set major ticks every 5th step
-    major_ticks = np.unique(np.concatenate(([1], np.arange(5, n_steps + 1, 5))))
+    major_ticks = range(1, 16, 2)
     ax.set_xticks(major_ticks, minor=False)
     ax.set_xticklabels(major_ticks)
 
@@ -726,6 +726,79 @@ def plot_metric_single(
     save_path = os.path.join(output_dir, f"{variable}_{metric}.png")
     plt.savefig(save_path, bbox_inches="tight")
     plt.close()
+
+
+def plot_avg_group_metric(
+    agg_group_metrics_dict,
+    zos_metrics_dict,
+    metric="rmse",
+    n_steps=15,
+    fs=12,
+    output_dir="avg_group_metric",
+    fill_between=True,
+    model_labels=None,
+):
+    """
+    Plot aggregated average group metrics vs. lead time.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    fig, axes = plt.subplots(
+        1, 4, figsize=(4 * 3.2, 3), constrained_layout=True
+    )
+    x = np.arange(1, n_steps + 1)
+
+    groups = ["uo", "vo", "so", "thetao"]
+    # Loop over the four groups
+    for i, group in enumerate(groups):
+        ax = axes[i]
+        ax.axvline(x=10, color="lightgray", ls="--", zorder=0)
+        unit = constants.PARAM_UNITS[constants.PARAM_NAMES_SHORT.index(group)]
+        for model, group_data in agg_group_metrics_dict.items():
+            y = np.array(group_data[group][metric])
+            ci_lower = np.array(group_data[group]["ci_lower"])
+            ci_upper = np.array(group_data[group]["ci_upper"])
+            steps = np.arange(1, len(y) + 1)
+            (line,) = ax.plot(
+                steps,
+                y,
+                marker="o",
+                markersize=4,
+                linestyle="-",
+                label=model_labels.get(model, model) if model_labels else model,
+            )
+            if fill_between:
+                ax.fill_between(
+                    steps, ci_lower, ci_upper, color=line.get_color(), alpha=0.3
+                )
+        ax.set_title(group, fontsize=fs)
+
+        ax.set_xticks(x, minor=True)
+        major_ticks = range(1, 16, 2)
+        ax.set_xticks(major_ticks, minor=False)
+        ax.set_xticklabels(major_ticks)
+        ax.set_xlabel("Lead time (days)", fontsize=fs)
+
+        if metric == "rmse":
+            ax.set_ylabel(f"{metric.upper()} ({unit})", fontsize=fs)
+        else:
+            ax.set_ylabel(metric.upper(), fontsize=fs)
+        ax.tick_params(labelsize=fs)
+
+    # Create a common legend across all subplots.
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.15),
+        ncol=len(agg_group_metrics_dict),
+        fontsize=fs,
+        frameon=False,
+    )
+
+    save_path = os.path.join(output_dir, f"{metric}.png")
+    fig.savefig(save_path, bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_norm_rmse_diff_by_depth(
@@ -768,7 +841,7 @@ def plot_norm_rmse_diff_by_depth(
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
-        figsize=(ncols * 3, nrows * 3),
+        figsize=(ncols * 2.9, nrows * 2.7),
         sharex=True,
         constrained_layout=True,
     )
@@ -783,6 +856,7 @@ def plot_norm_rmse_diff_by_depth(
     # Loop over each depth
     for i in range(n_subplots):
         ax = axes[i]
+        ax.axvline(x=10, color="lightgray", ls="--", zorder=0)
 
         # Extract the baseline values for this depth
         baseline_vals = baseline_metric[:, sorted_var_indices[i]]
@@ -847,12 +921,8 @@ def plot_norm_rmse_diff_by_depth(
             label=baseline_label,
         )
 
-        # Set minor ticks at every step
         ax.set_xticks(np.arange(1, n_steps + 1), minor=True)
-        # Set major ticks at steps 1, 5, 10, ...
-        major_ticks = np.unique(
-            np.concatenate(([1], np.arange(5, n_steps + 1, 5)))
-        )
+        major_ticks = range(1, 16, 2)
         ax.set_xticks(major_ticks, minor=False)
         ax.set_xticklabels(major_ticks)
 
@@ -914,6 +984,7 @@ def plot_norm_rmse_diff_single(
         baseline_ci_upper = baseline_ci["ci_upper"][:, var_index]
 
     plt.figure(figsize=(6, 5))
+    plt.axvline(x=10, color="lightgray", ls="--", zorder=0)
     # Loop over each model
     for model, json_path in model_jsons.items():
         model_metric, model_ci = load_metric_std_steps(
@@ -967,10 +1038,8 @@ def plot_norm_rmse_diff_single(
     plt.ylabel("Norm. RMSE diff.", fontsize=fs)
 
     ax = plt.gca()
-    # Set minor ticks on every step.
     ax.set_xticks(np.arange(1, n_steps + 1), minor=True)
-    # Set major ticks every 5 steps (ensuring that step 1 is included).
-    major_ticks = np.unique(np.concatenate(([1], np.arange(5, n_steps + 1, 5))))
+    major_ticks = range(1, 16, 2)
     ax.set_xticks(major_ticks, minor=False)
     ax.set_xticklabels(major_ticks)
 
@@ -1017,7 +1086,7 @@ def load_rmse_steps(json_path, n_steps=10):
 
 def plot_scorecard(norm_rmse_diff, depths, base_save_name):
     """
-    Generates a scorecard heatmap of normalized RMSE differences.
+    Plot scorecard of normalized RMSE differences.
     """
     param_names = constants.EXP_PARAM_NAMES_SHORT
     n_steps = norm_rmse_diff.shape[0]
@@ -1029,6 +1098,7 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
         "so": np.zeros((len(depths), n_steps)),
     }
 
+    # Populate the matrices for each variable
     for idx, param in enumerate(param_names):
         match = re.match(r"(uo|vo|thetao|so)_(\d+)", param)
         if match:
@@ -1040,6 +1110,15 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
                     norm_rmse_diff[:, idx]
                 )
 
+    # Compute a global limit over all values for a common vmin/vmax
+    global_limit = np.max(
+        [
+            np.max(np.abs(matrix))
+            for matrix in norm_rmse_diff_by_variable.values()
+        ]
+    )
+
+    # Create a 2x2 figure with shared x and y axes
     fig, axes = plt.subplots(
         2,
         2,
@@ -1048,18 +1127,18 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
         sharey=True,
         constrained_layout=True,
     )
-    ims = []
+    ims = []  # List to store the image objects
 
+    # Loop over each variable to create subplots
     for i, (ax, (variable, norm_rmse_diff_matrix)) in enumerate(
         zip(axes.ravel(), norm_rmse_diff_by_variable.items())
     ):
-        limit = np.max(np.abs(norm_rmse_diff_matrix))
         im = ax.imshow(
             norm_rmse_diff_matrix,
             cmap="bwr",
             aspect="auto",
-            vmin=-limit,
-            vmax=limit,
+            vmin=-global_limit,
+            vmax=global_limit,
         )
         ims.append(im)
         ax.set_title(f"{chr(97+i)}) {variable}", fontsize=12)
@@ -1072,14 +1151,17 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
         ax.set_yticks(np.arange(len(depths)))
         ax.set_yticklabels(depths)
 
-    # Instead of one shared colorbar, add one for each subplot.
-    for ax, im in zip(axes.ravel(), ims):
-        cbar = fig.colorbar(
-            im, ax=ax, orientation="vertical", fraction=0.046, pad=0.04
-        )
-        cbar.set_label("Norm. RMSE diff. (%)", fontsize=10)
-        cbar.ax.tick_params(labelsize=10)
+    cbar = fig.colorbar(
+        ims[0],
+        ax=axes.ravel().tolist(),
+        orientation="horizontal",
+        shrink=0.5,
+        aspect=30,
+    )
+    cbar.set_label("Norm. RMSE diff. (%)", fontsize=10)
+    cbar.ax.tick_params(labelsize=10)
 
+    # Save the figure
     save_dir = os.path.join("figures", "metrics", "scorecards")
     os.makedirs(save_dir, exist_ok=True)
     full_save_path = os.path.join(save_dir, base_save_name)
@@ -1244,8 +1326,8 @@ def plot_spatial_rmse_diff(
             im,
             ax=ax,
             orientation="vertical",
-            fraction=0.046,
-            pad=0.04,
+            shrink=0.7,
+            pad=0.02,
             extend="both",
         )
         cbar.set_label(f"RMSE diff. ({unit})", fontsize=10)
@@ -1301,28 +1383,38 @@ def plot_vertical_rmse_diff(
     )
     axes = axes.flatten()
 
-    # For each group, process rmse_all (n_grid, n_depths)
+    # For each group, process mse_all (n_grid, n_depths)
     for i, group in enumerate(groups):
         unit = constants.PARAM_UNITS[constants.PARAM_NAMES_SHORT.index(group)]
-        rmse_all_model = model_data[group]["rmse_all"]  # (n_grid, n_depths)
-        rmse_all_baseline = baseline_data[group][
-            "rmse_all"
-        ]  # (n_grid, n_depths)
-        norm_rmse_diff = rmse_all_model - rmse_all_baseline
-        vlim = np.percentile(
-            np.abs(norm_rmse_diff[~np.isnan(norm_rmse_diff)]), 99
-        )
+        mse_all_model = model_data[group]["mse_all"]  # (n_grid, n_depths)
+        mse_all_baseline = baseline_data[group]["mse_all"]  # (n_grid, n_depths)
 
-        # Reconstruct a full grid for each depth level
+        # Reconstruct a full grid for each depth level and compute RMSE diff
         section_list = []
         for d in range(n_depths):
-            full_grid_d = np.full(surface_mask.shape, np.nan)
-            full_grid_d[surface_mask == 1] = norm_rmse_diff[:, d]
-            # Average over latitude to get a 1D array of length n_lon
-            avg_over_lat = np.nanmean(full_grid_d, axis=0)
-            section_list.append(avg_over_lat)
+            # Reconstruct full grid, avg over latitude, then take sqrt of MSE
+            full_grid_model = np.full(surface_mask.shape, np.nan)
+            full_grid_model[surface_mask == 1] = mse_all_model[:, d]
+            avg_over_lat_model = np.nanmean(full_grid_model, axis=0)
+            rmse_model = np.sqrt(avg_over_lat_model)
+
+            # Reconstruct full grid, avg over latitude, then take sqrt of MSE
+            full_grid_baseline = np.full(surface_mask.shape, np.nan)
+            full_grid_baseline[surface_mask == 1] = mse_all_baseline[:, d]
+            avg_over_lat_baseline = np.nanmean(full_grid_baseline, axis=0)
+            rmse_baseline = np.sqrt(avg_over_lat_baseline)
+
+            # model RMSE - baseline RMSE
+            diff_rmse = rmse_model - rmse_baseline
+            section_list.append(diff_rmse)
+
         # Stack sections to form a 2D array with shape (n_depths, n_lon)
         vertical_section = np.stack(section_list, axis=0)
+
+        # Update vlim
+        vlim = np.percentile(
+            np.abs(vertical_section[~np.isnan(vertical_section)]), 99
+        )
 
         ax = axes[i]
         extent = [lons.min(), lons.max(), max(depth_vals), min(depth_vals)]
@@ -1344,8 +1436,8 @@ def plot_vertical_rmse_diff(
             im,
             ax=ax,
             orientation="vertical",
-            fraction=0.046,
-            pad=0.04,
+            shrink=0.7,
+            pad=0.02,
             extend="both",
         )
         cbar.set_label(f"RMSE diff. ({unit})", fontsize=10)
@@ -1483,6 +1575,94 @@ def main():
                 )
 
     # Plot RMSE / ACC w.r.t. lead time
+    if args.plot_rmse:
+        models = [
+            "seacast",
+            "seacast_base",
+            "seacast_10y",
+            "seacast_10y_base",
+            "med_phy",
+        ]
+        label_list = [
+            "SeaCast",
+            "SeaCast (w/o finetuning)",
+            "SeaCast (10y)",
+            "SeaCast (10y, w/o finetuning)",
+            "MedFS",
+        ]
+        model_labels = dict(zip(models, label_list))
+        output_dir = os.path.join("figures", "metrics", "avg_group_metric")
+        agg_group_rmse_all = {}
+        zos_rmse_all = {}
+        for model in models:
+            json_path_avg_rmse = os.path.join(
+                "data", args.dataset, "metrics", model, "avg_group_rmse.json"
+            )
+            with open(json_path_avg_rmse, "r", encoding="utf8") as jf:
+                agg_group_rmse_all[model] = json.load(jf)
+            json_path_rmse = os.path.join(
+                "data", args.dataset, "metrics", model, "rmse.json"
+            )
+            metric_matrix, ci_data = load_metric_std_steps(
+                json_path_rmse, n_steps=15, metric="rmse"
+            )
+            zos_rmse_all[model] = (metric_matrix, ci_data)
+        # Plot aggregated group RMSE for all models in one figure.
+        plot_avg_group_metric(
+            agg_group_rmse_all,
+            zos_rmse_all,
+            metric="rmse",
+            n_steps=15,
+            fs=12,
+            output_dir=output_dir,
+            fill_between=True,
+            model_labels=model_labels,
+        )
+
+    if args.plot_acc:
+        models = [
+            "seacast",
+            "seacast_base",
+            "seacast_10y",
+            "seacast_10y_base",
+            "med_phy",
+        ]
+        label_list = [
+            "SeaCast",
+            "SeaCast (w/o finetuning)",
+            "SeaCast (10y)",
+            "SeaCast (10y, w/o finetuning)",
+            "MedFS",
+        ]
+        model_labels = dict(zip(models, label_list))
+        output_dir = os.path.join("figures", "metrics", "avg_group_metric")
+        agg_group_acc_all = {}
+        zos_acc_all = {}
+        for model in models:
+            json_path_avg_acc = os.path.join(
+                "data", args.dataset, "metrics", model, "avg_group_acc.json"
+            )
+            with open(json_path_avg_acc, "r", encoding="utf8") as jf:
+                agg_group_acc_all[model] = json.load(jf)
+            json_path_acc = os.path.join(
+                "data", args.dataset, "metrics", model, "acc.json"
+            )
+            metric_matrix, ci_data = load_metric_std_steps(
+                json_path_acc, n_steps=15, metric="acc"
+            )
+            zos_acc_all[model] = (metric_matrix, ci_data)
+        # Plot aggregated group ACC for all models in one figure.
+        plot_avg_group_metric(
+            agg_group_acc_all,
+            zos_acc_all,
+            metric="acc",
+            n_steps=15,
+            fs=12,
+            output_dir=output_dir,
+            fill_between=False,
+            model_labels=model_labels,
+        )
+
     if args.plot_rmse:
         output_dir = os.path.join("figures", "metrics", "rmse_models")
         models = [

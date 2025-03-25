@@ -99,9 +99,9 @@ def fisher_ci(acc_values):
     z = np.arctanh(acc_values)
     mean_z = np.mean(z)
     se_z = np.std(z, ddof=1) / np.sqrt(n)
-    # 95% CI using standard normal quantiles
-    z_lower = mean_z - 1.96 * se_z
-    z_upper = mean_z + 1.96 * se_z
+    # 50% CI using standard normal quantiles
+    z_lower = mean_z - 0.6745 * se_z
+    z_upper = mean_z + 0.6745 * se_z
     return (np.tanh(z_lower), np.tanh(z_upper))
 
 
@@ -170,9 +170,97 @@ def compute_acc_per_feature(
     return acc_dict
 
 
+def compute_avg_group_mse(
+    forecast, analysis, feature_names, interior_mask, grid_weights, t_idx=None
+):
+    """
+    Compute the average group RMSE for groups: uo, vo, so, thetao.
+
+    Returns:
+      A dict with keys for each group mapping to a dict with:
+        - mse: a 1D numpy array (n_timesteps,) of MSE values.
+    """
+    groups = {"uo": [], "vo": [], "so": [], "thetao": []}
+    for depth in constants.DEPTHS:
+        groups["uo"].append(feature_names.index(f"uo_{round(depth)}"))
+        groups["vo"].append(feature_names.index(f"vo_{round(depth)}"))
+        groups["so"].append(feature_names.index(f"so_{round(depth)}"))
+        groups["thetao"].append(feature_names.index(f"thetao_{round(depth)}"))
+
+    if t_idx is None:
+        t_idx = range(forecast.shape[0])
+
+    results = {}
+    for group, indices in groups.items():
+        mse_list = []
+        for t in t_idx:
+            # error: shape (n_grid, n_group_features)
+            error = forecast[t][:, indices] - analysis[t][:, indices]
+            mask = interior_mask[:, indices]
+            error = np.where(mask, error, np.nan)
+            # Average over group indices (depth)
+            cell_sq_error = np.nanmean(error**2, axis=1)  # (n_grid,)
+            # Compute weighted average over grid cells:
+            mse_t = np.nansum(cell_sq_error * grid_weights) / np.nansum(
+                grid_weights
+            )
+            mse_list.append(mse_t)
+        results[group] = {"mse": np.array(mse_list)}
+    return results
+
+
+def compute_avg_group_acc(
+    forecast, analysis, feature_names, interior_mask, grid_weights, t_idx=None
+):
+    """
+    Compute the average group ACC for groups: uo, vo, so, thetao.
+
+    Returns:
+      A dict with keys for each group mapping to:
+        - acc: a 1D numpy array (n_timesteps,) of ACC values.
+    """
+    groups = {"uo": [], "vo": [], "so": [], "thetao": []}
+    for depth in constants.DEPTHS:
+        groups["uo"].append(feature_names.index(f"uo_{round(depth)}"))
+        groups["vo"].append(feature_names.index(f"vo_{round(depth)}"))
+        groups["so"].append(feature_names.index(f"so_{round(depth)}"))
+        groups["thetao"].append(feature_names.index(f"thetao_{round(depth)}"))
+
+    if t_idx is None:
+        t_idx = range(forecast.shape[0])
+
+    results = {}
+    for group, indices in groups.items():
+        acc_list = []
+        for t in t_idx:
+            # Average over the group indices for each grid cell:
+            group_forecast = np.nanmean(
+                forecast[t][:, indices], axis=1
+            )  # (n_grid,)
+            group_analysis = np.nanmean(
+                analysis[t][:, indices], axis=1
+            )  # (n_grid,)
+            # Valid mask: require all features in the group to be valid
+            valid_mask = np.all(interior_mask[:, indices], axis=1)
+            f_valid = group_forecast[valid_mask]
+            a_valid = group_analysis[valid_mask]
+            weights_valid = grid_weights[valid_mask]
+            numerator = np.nansum(weights_valid * f_valid * a_valid)
+            denominator = np.sqrt(
+                np.nansum(weights_valid * f_valid**2)
+            ) * np.sqrt(np.nansum(weights_valid * a_valid**2))
+            if denominator == 0:
+                acc_t = np.nan
+            else:
+                acc_t = numerator / denominator
+            acc_list.append(acc_t)
+        results[group] = {"acc": np.array(acc_list)}
+    return results
+
+
 def compute_group_bias(forecast, analysis, feature_names, sea_mask, t_idx):
     """
-    For each feature group (uo_*, vo_*, so_*, thetao_* and zos),
+    For each feature group (uo, vo, so, thetao and zos),
     compute bias (forecast - analysis) averaged over group features.
     Returns group_bias: {group: (T, n_grid)}
     """
@@ -305,6 +393,20 @@ def process_file(
         climatology,
         validity_dates,
     )
+    avg_group_mse = compute_avg_group_mse(
+        forecast,
+        analysis,
+        feature_names,
+        interior_mask,
+        grid_weights,
+    )
+    avg_group_acc = compute_avg_group_acc(
+        forecast,
+        analysis,
+        feature_names,
+        interior_mask,
+        grid_weights,
+    )
     group_mse = compute_group_rmse(
         forecast,
         analysis,
@@ -319,20 +421,28 @@ def process_file(
         interior_mask,
         t_idx=([0, 4, 9] if is_med_phy else [0, 4, 9, 14]),
     )
-    return mse_per_feature, acc_per_feature, group_mse, group_bias
+    return {
+        "mse_per_feature": mse_per_feature,
+        "acc_per_feature": acc_per_feature,
+        "avg_group_mse": avg_group_mse,
+        "avg_group_acc": avg_group_acc,
+        "group_mse": group_mse,
+        "group_bias": group_bias,
+    }
 
 
-def aggregate_per_feature_rmse(metrics_list, feature_names, n_bootstrap=1000):
+def aggregate_mse_per_feature(metrics_list, feature_names, n_bootstrap=1000):
     """
     For each lead time and each feature, compute per-file MSE,
     then return the aggregated RMSE and ci via bootstrapping.
     """
-    lead_times = len(metrics_list[0][0])
+    lead_times = len(metrics_list[0]["mse_per_feature"])
     aggregated = {}
     for t in range(lead_times):
         t_str = str(t)
         mse_vals = {fname: [] for fname in feature_names}
-        for mse_per_feature, _, _, _ in metrics_list:
+        for metrics in metrics_list:
+            mse_per_feature = metrics["mse_per_feature"]
             for fname in feature_names:
                 mse_vals[fname].append(mse_per_feature[t_str][fname])
         aggregated[t_str] = {}
@@ -361,17 +471,18 @@ def aggregate_per_feature_rmse(metrics_list, feature_names, n_bootstrap=1000):
     return aggregated
 
 
-def aggregate_per_feature_acc(metrics_list, feature_names):
+def aggregate_acc_per_feature(metrics_list, feature_names):
     """
     For each lead time and each feature, compute per-file ACC,
     and its 95% confidence interval computed via Fisher's z-transform.
     """
-    lead_times = len(metrics_list[0][1])
+    lead_times = len(metrics_list[0]["acc_per_feature"])
     aggregated = {}
     for t in range(lead_times):
         t_str = str(t)
         acc_vals = {fname: [] for fname in feature_names}
-        for _, acc_per_feature, _, _ in metrics_list:
+        for metrics in metrics_list:
+            acc_per_feature = metrics["acc_per_feature"]
             for fname in feature_names:
                 acc_vals[fname].append(acc_per_feature[t_str][fname])
         aggregated[t_str] = {}
@@ -388,6 +499,94 @@ def aggregate_per_feature_acc(metrics_list, feature_names):
     return aggregated
 
 
+def aggregate_avg_group_rmse(metrics_list, n_bootstrap=1000):
+    """
+    Aggregate per-file average group RMSE for each timestep.
+
+    Returns:
+      A dict with keys for each group mapping to a dict with:
+        - "rmse": numpy array of aggregated RMSE values per time step.
+        - "ci_lower": numpy array of lower bounds (per time step).
+        - "ci_upper": numpy array of upper bounds (per time step).
+    """
+    aggregated = {}
+    groups = ["uo", "vo", "so", "thetao"]
+    for group in groups:
+        # Stack MSE arrays from each file shape (n_files, n_timesteps)
+        mse_array = np.stack(
+            [
+                file_metric["avg_group_mse"][group]["mse"]
+                for file_metric in metrics_list
+            ],
+            axis=0,
+        )
+        n_files, n_timesteps = mse_array.shape
+        agg_rmse = np.zeros(n_timesteps)
+        ci_lower = np.zeros(n_timesteps)
+        ci_upper = np.zeros(n_timesteps)
+        for t in range(n_timesteps):
+            mse_vals = mse_array[:, t]
+            agg_mse = np.mean(mse_vals)
+            agg_rmse[t] = np.sqrt(agg_mse)
+
+            # Bootstrap the mean MSE for time step t
+            boot_mses = []
+            for _ in range(n_bootstrap):
+                sample = np.random.choice(mse_vals, size=n_files, replace=True)
+                boot_mses.append(np.mean(sample))
+            boot_mses = np.array(boot_mses)
+            boot_rmses = np.sqrt(boot_mses)
+            ci_lower[t] = np.percentile(boot_rmses, 25)
+            ci_upper[t] = np.percentile(boot_rmses, 75)
+
+        aggregated[group] = {
+            "rmse": agg_rmse.tolist(),
+            "ci_lower": ci_lower.tolist(),
+            "ci_upper": ci_upper.tolist(),
+        }
+    return aggregated
+
+
+def aggregate_avg_group_acc(metrics_list):
+    """
+    Aggregate per-file average group ACC metrics for each timestep.
+
+    Returns:
+      A dict with keys for each group mapping to a dict with:
+        - "acc": numpy array of aggregated ACC values per time step.
+        - "ci_lower": numpy array of lower bounds (per time step).
+        - "ci_upper": numpy array of upper bounds (per time step).
+    """
+    aggregated = {}
+    groups = ["uo", "vo", "so", "thetao"]
+    for group in groups:
+        # Stack ACC arrays from each file (n_files, n_timesteps)
+        acc_array = np.stack(
+            [
+                file_metric["avg_group_acc"][group]["acc"]
+                for file_metric in metrics_list
+            ],
+            axis=0,
+        )
+        _, n_timesteps = acc_array.shape
+        agg_acc = np.zeros(n_timesteps)
+        ci_lower = np.zeros(n_timesteps)
+        ci_upper = np.zeros(n_timesteps)
+        for t in range(n_timesteps):
+            acc_vals = acc_array[:, t]
+            agg_acc[t] = np.nanmean(acc_vals)
+            # Compute CI using Fisher's z-transform for time step t
+            ci_low, ci_up = fisher_ci(acc_vals)
+            ci_lower[t] = ci_low
+            ci_upper[t] = ci_up
+        aggregated[group] = {
+            "acc": agg_acc.tolist(),
+            "ci_lower": ci_lower.tolist(),
+            "ci_upper": ci_upper.tolist(),
+        }
+    return aggregated
+
+
 def aggregate_group_rmse(metrics_list):
     """
     Given a list of per-file group MSE metrics this function averages
@@ -397,14 +596,18 @@ def aggregate_group_rmse(metrics_list):
     Returns:
        aggregated_group_rmse : dictionary with keys for each group
         - rmse_avg: (array of shape (n_grid,))
-        - rmse_all: (n_grid, n_group_features)
+        - mse_all: (n_grid, n_group_features)
     """
     aggregated = {}
+    groups = metrics_list[0]["group_mse"].keys()
     # Loop over each group
-    for group in metrics_list[0][2].keys():
+    for group in groups:
         # Stack mse_avg arrays from all files, each (n_grid,)
         mse_avg_stack = np.stack(
-            [file_metric[2][group]["mse_avg"] for file_metric in metrics_list],
+            [
+                file_metric["group_mse"][group]["mse_avg"]
+                for file_metric in metrics_list
+            ],
             axis=0,
         )
         mean_mse_avg = np.nanmean(mse_avg_stack, axis=0)  # (n_grid,)
@@ -412,15 +615,17 @@ def aggregate_group_rmse(metrics_list):
 
         # Stack mse_all arrays from all files, each (n_grid, n_group_features)
         mse_all_stack = np.stack(
-            [file_metric[2][group]["mse_all"] for file_metric in metrics_list],
+            [
+                file_metric["group_mse"][group]["mse_all"]
+                for file_metric in metrics_list
+            ],
             axis=0,
         )
         mean_mse_all = np.nanmean(
             mse_all_stack, axis=0
         )  # (n_grid, n_group_features)
-        rmse_all = np.sqrt(mean_mse_all)
 
-        aggregated[group] = {"rmse_avg": rmse_avg, "rmse_all": rmse_all}
+        aggregated[group] = {"rmse_avg": rmse_avg, "mse_all": mean_mse_all}
     return aggregated
 
 
@@ -428,12 +633,13 @@ def aggregate_group_bias(metrics_list):
     """
     Given a list of group metrics, average the group bias over files.
     """
-    groups = metrics_list[0][3].keys()
+    groups = metrics_list[0]["group_bias"].keys()
     aggregated_group_bias = {}
     for group in groups:
         sum_bias = None
         count = 0
-        for _, _, _, group_bias in metrics_list:
+        for metrics in metrics_list:
+            group_bias = metrics["group_bias"]
             if group in group_bias:
                 if sum_bias is None:
                     sum_bias = np.array(group_bias[group])
@@ -501,8 +707,10 @@ def aggregate_directory_metrics(
     metrics_list = compute(*delayed_metrics)
 
     # Aggregate per-feature metrics
-    aggregated_rmse = aggregate_per_feature_rmse(metrics_list, feature_names)
-    aggregated_acc = aggregate_per_feature_acc(metrics_list, feature_names)
+    aggregated_rmse = aggregate_mse_per_feature(metrics_list, feature_names)
+    aggregated_acc = aggregate_acc_per_feature(metrics_list, feature_names)
+    aggregated_avg_group_rmse = aggregate_avg_group_rmse(metrics_list)
+    aggregated_avg_group_acc = aggregate_avg_group_acc(metrics_list)
     aggregated_group_rmse = aggregate_group_rmse(metrics_list)
     aggregated_group_bias = aggregate_group_bias(metrics_list)
 
@@ -510,10 +718,21 @@ def aggregate_directory_metrics(
     json_path_rmse = os.path.join(output_dir, "rmse.json")
     with open(json_path_rmse, "w", encoding="utf8") as jf:
         json.dump(aggregated_rmse, jf, indent=2)
+
     json_path_acc = os.path.join(output_dir, "acc.json")
     with open(json_path_acc, "w", encoding="utf8") as jf:
         json.dump(aggregated_acc, jf, indent=2)
+
+    json_path_avg_rmse = os.path.join(output_dir, "avg_group_rmse.json")
+    with open(json_path_avg_rmse, "w", encoding="utf8") as jf:
+        json.dump(aggregated_avg_group_rmse, jf, indent=2)
+
+    json_path_avg_acc = os.path.join(output_dir, "avg_group_acc.json")
+    with open(json_path_avg_acc, "w", encoding="utf8") as jf:
+        json.dump(aggregated_avg_group_acc, jf, indent=2)
+
     np.save(os.path.join(output_dir, "group_rmse.npy"), aggregated_group_rmse)
+
     np.save(os.path.join(output_dir, "group_bias.npy"), aggregated_group_bias)
 
     return f"Aggregated metrics saved for {input_dir} in {output_dir}"
