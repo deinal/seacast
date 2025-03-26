@@ -11,7 +11,6 @@ import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter
 from matplotlib.ticker import MultipleLocator
 
 # First-party
@@ -144,7 +143,6 @@ def plot_forecast(
         ana = analysis_ds[param].sel(time=ds.time[idx])
         if "depth" in ana.dims:
             ana = ana.isel(depth=depth_index)
-
         diff = fc - ana
         diff_vals.append(diff.values)
 
@@ -168,6 +166,8 @@ def plot_forecast(
         ncols=2,
         figsize=(20, 4 * n_rows),
         constrained_layout=True,
+        sharex=True,
+        sharey=True,
         subplot_kw={"projection": ccrs.PlateCarree()},
     )
     if n_rows == 1:
@@ -178,7 +178,6 @@ def plot_forecast(
         fc_data = ds[param].isel(time=idx)
         if "depth" in fc_data.dims:
             fc_data = fc_data.isel(depth=depth_index)
-
         ax_fc = axes[row, 0]
         im_fc = ax_fc.imshow(
             fc_data,
@@ -188,7 +187,7 @@ def plot_forecast(
             vmin=fc_vmin,
             vmax=fc_vmax,
         )
-        ax_fc.set_title(f"{model} {param}{depth} t={idx} ({unit})")
+        ax_fc.set_title(f"{model} {param}{depth} t={idx+1} ({unit})")
         ax_fc.coastlines(resolution="10m", linewidth=1)
         ax_fc.add_feature(cfeature.LAND, facecolor="whitesmoke")
         fig.colorbar(
@@ -199,9 +198,7 @@ def plot_forecast(
         ana_data = analysis_ds[param].sel(time=ds.time[idx])
         if "depth" in ana_data.dims:
             ana_data = ana_data.isel(depth=depth_index)
-
         diff_data = fc_data - ana_data
-
         ax_diff = axes[row, 1]
         im_diff = ax_diff.imshow(
             diff_data,
@@ -218,36 +215,40 @@ def plot_forecast(
             im_diff, ax=ax_diff, orientation="vertical", shrink=0.7, pad=0.02
         )
 
+    # Compute tick positions for latitude and longitude
     lat_min, lat_max = extent[2], extent[3]
     lat_tick_start = np.ceil(lat_min / 3) * 3
     lat_tick_end = np.floor(lat_max / 3) * 3
     lat_ticks = np.arange(lat_tick_start, lat_tick_end + 1, 3)
-    lat_labels = [
-        f"{abs(lat):.0f}°{'N' if lat >= 0 else 'S'}" for lat in lat_ticks
-    ]
 
-    # Longitude ticks: multiples of 5 in W/E convention.
     lon_min, lon_max = extent[0], extent[1]
     lon_tick_start = np.ceil(lon_min / 5) * 5
     lon_tick_end = np.floor(lon_max / 5) * 5
     lon_ticks = np.arange(lon_tick_start, lon_tick_end + 1, 5)
-    lon_labels = [
-        f"{abs(lon):.0f}°{'E' if lon >= 0 else 'W'}" for lon in lon_ticks
-    ]
 
-    # Apply latitude ticks to all axes in the first column
-    for ax in axes[:, 0]:
-        ax.set_ylabel("Latitude")
-        ax.set_yticks(lat_ticks, crs=ccrs.PlateCarree())
-        ax.set_yticklabels(lat_labels)
-
-    # Apply longitude ticks to all axes in the last row
-    for ax in axes[-1, :]:
-        ax.set_ylabel("Longitude")
+    # Apply fixed tick positions to every subplot
+    for ax in axes.ravel():
         ax.set_xticks(lon_ticks, crs=ccrs.PlateCarree())
-        ax.set_xticklabels(lon_labels)
+        ax.set_yticks(lat_ticks, crs=ccrs.PlateCarree())
 
-    # Save
+    # Show tick labels only on bottom row (x-axis) and first column (y-axis)
+    nrows, ncols = axes.shape
+    for i in range(nrows):
+        for j in range(ncols):
+            if i == nrows - 1:
+                axes[i, j].set_xlabel("Longitude (°)")
+                axes[i, j].tick_params(labelbottom=True)
+                axes[i, j].set_xticklabels([str(int(x)) for x in lon_ticks])
+            else:
+                axes[i, j].tick_params(labelbottom=False)
+            if j == 0:
+                axes[i, j].set_ylabel("Latitude (°)")
+                axes[i, j].tick_params(labelleft=True)
+                axes[i, j].set_yticklabels([str(int(y)) for y in lat_ticks])
+            else:
+                axes[i, j].tick_params(labelleft=False)
+
+    # Save the figure
     save_dir = os.path.join("figures", "metrics", "forecast")
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"{model}_{param}.png")
@@ -277,16 +278,14 @@ def plot_forecast_vertical(
     if direction == "zonal":
         horiz_dim = "longitude"
         x_coord_name = "latitude"
-        xlabel = "Latitude"
+        xlabel = "Latitude (°)"
         fig_width = 9
-        x_formatter = LatitudeFormatter()
         locator = MultipleLocator(3)
     elif direction == "meridional":
         horiz_dim = "latitude"
         x_coord_name = "longitude"
-        xlabel = "Longitude"
+        xlabel = "Longitude (°)"
         fig_width = 18
-        x_formatter = LongitudeFormatter()
         locator = MultipleLocator(5)
     else:
         raise ValueError("direction must be 'zonal' or 'meridional'")
@@ -307,7 +306,7 @@ def plot_forecast_vertical(
         # Average horizontally
         fc_sec = fc.mean(dim=horiz_dim, skipna=True)
         ana_sec = ana.mean(dim=horiz_dim, skipna=True)
-        # Ensure depth as the first dimension
+        # Ensure depth is the first dimension
         if "depth" in fc_sec.dims and x_coord_name in fc_sec.dims:
             fc_sec = fc_sec.transpose("depth", x_coord_name)
             ana_sec = ana_sec.transpose("depth", x_coord_name)
@@ -333,6 +332,8 @@ def plot_forecast_vertical(
         ncols=n_cols,
         figsize=(fig_width, 4 * n_rows),
         constrained_layout=True,
+        sharex=True,
+        sharey=True,
     )
 
     extent = [x_coord.min(), x_coord.max(), n_depths - 1, 0]
@@ -347,8 +348,9 @@ def plot_forecast_vertical(
             vmax=fc_vmax,
             extent=extent,
         )
-        ax_fc.set_title(f"Forecast {param} t={idx} ({unit})", fontsize=fs)
+        ax_fc.set_title(f"Forecast {param} t={idx+1} ({unit})", fontsize=fs)
         ax_fc.set_ylabel("Depth (m)", fontsize=fs)
+        ax_fc.xaxis.set_major_locator(locator)
         if i == n_rows - 1:
             ax_fc.set_xlabel(xlabel, fontsize=fs)
         else:
@@ -356,10 +358,6 @@ def plot_forecast_vertical(
 
         ax_fc.set_yticks(y_positions)
         ax_fc.set_yticklabels(yticklabels)
-
-        ax_fc.xaxis.set_major_locator(locator)
-        ax_fc.xaxis.set_major_formatter(x_formatter)
-
         fig.colorbar(
             im_fc, ax=ax_fc, orientation="vertical", shrink=0.7, pad=0.02
         )
@@ -374,24 +372,24 @@ def plot_forecast_vertical(
             vmax=bias_vmax,
             extent=extent,
         )
-        ax_bias.set_title(f"Bias {param} t={idx} ({unit})", fontsize=fs)
+        ax_bias.set_title(f"Bias {param} t={idx+1} ({unit})", fontsize=fs)
+        ax_bias.xaxis.set_major_locator(locator)
         if i == n_rows - 1:
             ax_bias.set_xlabel(xlabel, fontsize=fs)
         else:
             ax_bias.set_xticklabels([])
         ax_bias.set_yticks(y_positions)
         ax_bias.set_yticklabels(yticklabels)
-
-        ax_bias.xaxis.set_major_locator(locator)
-        ax_bias.xaxis.set_major_formatter(x_formatter)
-
         fig.colorbar(
-            im_bias,
-            ax=ax_bias,
-            orientation="vertical",
-            shrink=0.7,
-            pad=0.02,
+            im_bias, ax=ax_bias, orientation="vertical", shrink=0.7, pad=0.02
         )
+
+    # Third-party
+    from matplotlib.ticker import FuncFormatter
+
+    formatter = FuncFormatter(lambda x, pos: f"{x:.0f}")
+    for ax in axes[-1, :]:
+        ax.xaxis.set_major_formatter(formatter)
 
     save_dir = os.path.join("figures", "metrics", "forecast_vertical")
     os.makedirs(save_dir, exist_ok=True)
@@ -434,6 +432,8 @@ def plot_group_bias(var, model, sea_mask, dataset="mediterranean"):
         figsize=(16, 6),
         subplot_kw={"projection": ccrs.PlateCarree()},
         constrained_layout=True,
+        sharex=True,
+        sharey=True,
     )
     axes = axes.flatten()
 
@@ -465,16 +465,14 @@ def plot_group_bias(var, model, sea_mask, dataset="mediterranean"):
         ax.set_yticks(
             np.linspace(extent[2], extent[3], 5), crs=ccrs.PlateCarree()
         )
-        ax.xaxis.set_major_formatter(LongitudeFormatter())
-        ax.yaxis.set_major_formatter(LatitudeFormatter())
         ax.xaxis.set_major_locator(MultipleLocator(5))
         ax.yaxis.set_major_locator(MultipleLocator(3))
         ax.tick_params(labelsize=8)
 
         if i % 2 == 0:
-            ax.set_ylabel("Latitude", fontsize=9)
+            ax.set_ylabel("Latitude (°)", fontsize=9)
         if i // 2 == 1:
-            ax.set_xlabel("Longitude", fontsize=9)
+            ax.set_xlabel("Longitude (°)", fontsize=9)
 
     # Shared colorbar
     if var == "so":
@@ -601,8 +599,7 @@ def plot_metric_by_depth(
                 (line,) = ax.plot(
                     x,
                     y,
-                    marker="o",
-                    markersize=4,
+                    linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
                 )
@@ -613,8 +610,7 @@ def plot_metric_by_depth(
                 ax.plot(
                     x,
                     y,
-                    marker="o",
-                    markersize=4,
+                    linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
                 )
@@ -684,8 +680,7 @@ def plot_metric_single(
             (line,) = plt.plot(
                 x,
                 y,
-                marker="o",
-                markersize=4,
+                linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
             )
@@ -696,8 +691,7 @@ def plot_metric_single(
             plt.plot(
                 x,
                 y,
-                marker="o",
-                markersize=4,
+                linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
             )
@@ -761,8 +755,7 @@ def plot_avg_group_metric(
             (line,) = ax.plot(
                 steps,
                 y,
-                marker="o",
-                markersize=4,
+                linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model) if model_labels else model,
             )
@@ -889,8 +882,7 @@ def plot_norm_rmse_diff_by_depth(
                 (line,) = ax.plot(
                     x,
                     norm_diff,
-                    marker="o",
-                    markersize=4,
+                    linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
                 )
@@ -905,8 +897,7 @@ def plot_norm_rmse_diff_by_depth(
                 ax.plot(
                     x,
                     norm_diff,
-                    marker="o",
-                    markersize=4,
+                    linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
                 )
@@ -1004,8 +995,7 @@ def plot_norm_rmse_diff_single(
             (line,) = plt.plot(
                 x,
                 norm_diff,
-                marker="o",
-                markersize=4,
+                linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
             )
@@ -1020,8 +1010,7 @@ def plot_norm_rmse_diff_single(
             plt.plot(
                 x,
                 norm_diff,
-                marker="o",
-                markersize=4,
+                linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
             )
@@ -1170,10 +1159,15 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
 
 
 def plot_rmse_vs_depth_variable(
-    rmse_std_all, variable, n_steps=15, fs=12, output_dir="rmse_depth_plots"
+    rmse_std_all,
+    variable,
+    model_labels,
+    n_steps=15,
+    fs=12,
+    output_dir="rmse_depths",
 ):
     """
-    Plots RMSE (x-axis) vs Depth (y-axis) for a given lead time.
+    Plots RMSE (x-axis) vs depth (y-axis) for a given lead time.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -1191,14 +1185,13 @@ def plot_rmse_vs_depth_variable(
     # Sort by depth (ascending)
     sorted_pairs = sorted(zip(depths, var_indices), key=lambda x: x[0])
     depths, var_indices = zip(*sorted_pairs)
-    positions = np.arange(len(depths))
 
     ncols = 5
     nrows = 3
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
-        figsize=(ncols * 3, nrows * 5),
+        figsize=(ncols * 3, nrows * 3.2),
         sharex=True,
         sharey=True,
     )
@@ -1211,21 +1204,16 @@ def plot_rmse_vs_depth_variable(
             rmse_depth = rmse_matrix[t, list(var_indices)]
             ax.plot(
                 rmse_depth,
-                positions,
-                marker="o",
-                markersize=4,
-                linestyle="-",
-                label=model,
+                depths,
+                label=model_labels[model],
+                linewidth=2,
             )
-        ax.set_title(f"{chr(97+t)}) {variable} (t = {t+1}d)", fontsize=fs)
+        ax.set_title(f"{chr(97+t)}) {variable} (t={t+1}d)", fontsize=fs)
         if t // ncols == nrows - 1:
             ax.set_xlabel(f"RMSE ({unit})", fontsize=fs)
         if t % ncols == 0:
             ax.set_ylabel("Depth (m)", fontsize=fs)
-        ax.set_yticks(positions)
-        ax.set_yticklabels(depths)
-        ax.invert_yaxis()  # Depth 0 at the top
-        # ax.grid(True)
+        ax.invert_yaxis()
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
@@ -1248,6 +1236,7 @@ def plot_spatial_rmse_diff(
     sea_mask,
     dataset="mediterranean",
     output_dir="figures/metrics/spatial_rmse_diff",
+    fs=14,
 ):
     """
     Load aggregated group RMSE files for model and baseline and plot
@@ -1273,7 +1262,7 @@ def plot_spatial_rmse_diff(
     fig, axes = plt.subplots(
         2,
         2,
-        figsize=(25, 10),
+        figsize=(20, 8),
         subplot_kw={"projection": ccrs.PlateCarree()},
         constrained_layout=True,
         sharex=True,
@@ -1308,7 +1297,7 @@ def plot_spatial_rmse_diff(
         )
         ax.coastlines(resolution="10m", linewidth=0.5)
         ax.add_feature(cfeature.LAND, facecolor="whitesmoke")
-        ax.set_title(f"{group}", fontsize=12)
+        ax.set_title(f"{group} RMSE diff. ({unit})", fontsize=fs)
 
         # Set ticks and format them as degrees
         ax.set_xticks(
@@ -1317,12 +1306,15 @@ def plot_spatial_rmse_diff(
         ax.set_yticks(
             np.linspace(lats.min(), lats.max(), 5), crs=ccrs.PlateCarree()
         )
-        ax.xaxis.set_major_formatter(LongitudeFormatter())
-        ax.yaxis.set_major_formatter(LatitudeFormatter())
         ax.xaxis.set_major_locator(MultipleLocator(5))
         ax.yaxis.set_major_locator(MultipleLocator(3))
 
-        cbar = fig.colorbar(
+        for tick in ax.get_xticklabels():
+            tick.set_fontsize(fs)
+        for tick in ax.get_yticklabels():
+            tick.set_fontsize(fs)
+
+        fig.colorbar(
             im,
             ax=ax,
             orientation="vertical",
@@ -1330,7 +1322,20 @@ def plot_spatial_rmse_diff(
             pad=0.02,
             extend="both",
         )
-        cbar.set_label(f"RMSE diff. ({unit})", fontsize=10)
+
+    n_rows = 2
+    n_cols = 2
+    for i, ax in enumerate(axes):
+        row = i // n_cols
+        col = i % n_cols
+        if row == n_rows - 1:
+            ax.set_xlabel("Longitude (°)", fontsize=fs)
+        else:
+            ax.tick_params(labelbottom=False)
+        if col == 0:
+            ax.set_ylabel("Latitude (°)", fontsize=fs)
+        else:
+            ax.tick_params(labelleft=False)
 
     os.makedirs(output_dir, exist_ok=True)
     save_path = os.path.join(output_dir, f"{model}_vs_{baseline}.png")
@@ -1344,6 +1349,7 @@ def plot_vertical_rmse_diff(
     sea_mask,
     dataset="mediterranean",
     output_dir="figures/metrics/vertical_rmse_diff",
+    fs=14,
 ):
     """
     Load aggregated group RMSE npy files for model and baseline and plot,
@@ -1428,11 +1434,8 @@ def plot_vertical_rmse_diff(
             vmin=-vlim,
             vmax=vlim,
         )
-        ax.set_title(f"{group}", fontsize=12)
-        ax.set_xlabel("Longitude", fontsize=10)
-        ax.set_ylabel("Depth (m)", fontsize=10)
-        ax.xaxis.set_major_formatter(LongitudeFormatter())
-        cbar = fig.colorbar(
+        ax.set_title(f"{group} RMSE diff. ({unit})", fontsize=fs)
+        fig.colorbar(
             im,
             ax=ax,
             orientation="vertical",
@@ -1440,7 +1443,21 @@ def plot_vertical_rmse_diff(
             pad=0.02,
             extend="both",
         )
-        cbar.set_label(f"RMSE diff. ({unit})", fontsize=10)
+
+        for tick in ax.get_xticklabels():
+            tick.set_fontsize(fs)
+        for tick in ax.get_yticklabels():
+            tick.set_fontsize(fs)
+
+    n_rows = 2
+    n_cols = 2
+    for i, ax in enumerate(axes):
+        row = i // n_cols
+        col = i % n_cols
+        if row == n_rows - 1:
+            ax.set_xlabel("Longitude (°)", fontsize=fs)
+        if col == 0:
+            ax.set_ylabel("Depth (m)", fontsize=fs)
 
     os.makedirs(output_dir, exist_ok=True)
     save_path = os.path.join(output_dir, f"{model}_vs_{baseline}.png")
@@ -1760,18 +1777,18 @@ def main():
     if args.plot_rmse:
         output_dir = os.path.join("figures", "metrics", "rmse_forcings")
         models = [
+            "seacast",
             "t2m_permuted",
             "tau_permuted",
             "msl_permuted",
             "all_permuted",
-            "seacast",
         ]
         label_list = [
+            "SeaCast",
             "Permuted t2m",
             "Permuted tau",
             "Permuted msl",
             "Permuted all",
-            "Original",
         ]
         model_labels = dict(zip(models, label_list))
         metric_std_all = {}
@@ -1807,18 +1824,18 @@ def main():
     if args.plot_acc:
         output_dir = os.path.join("figures", "metrics", "acc_forcings")
         models = [
+            "seacast",
             "t2m_permuted",
             "tau_permuted",
             "msl_permuted",
             "all_permuted",
-            "seacast",
         ]
         label_list = [
+            "SeaCast",
             "Permuted t2m",
             "Permuted tau",
             "Permuted msl",
             "Permuted all",
-            "Original",
         ]
         model_labels = dict(zip(models, label_list))
         metric_std_all = {}
@@ -2039,11 +2056,11 @@ def main():
     # RMSE at depth
     if args.plot_rmse_depth:
         output_dir = os.path.join("figures", "metrics", "rmse_depths")
-        models = ["seacast_analysis", "seacast", "med_phy", "persistence"]
+        models = ["seacast", "med_phy", "seacast_analysis", "persistence"]
         label_list = [
-            "SeaCast (analysis init)",
             "SeaCast",
             "MedFS",
+            "SeaCast (analysis init)",
             "Persistence",
         ]
         model_labels = dict(zip(models, label_list))
@@ -2058,7 +2075,12 @@ def main():
             rmse_std_all[model] = (rmse_matrix, std_matrix)
         for variable in ["uo", "vo", "so", "thetao"]:
             plot_rmse_vs_depth_variable(
-                rmse_std_all, variable, n_steps=15, fs=12, output_dir=output_dir
+                rmse_std_all,
+                variable,
+                model_labels,
+                n_steps=15,
+                fs=12,
+                output_dir=output_dir,
             )
 
     # Spatially averaged RMSE diff
