@@ -11,14 +11,14 @@ import numpy as np
 import xarray as xr
 
 
-def plot_lead_rmse(models, dataset, out_dir, plot_ci=False):
+def plot_lead_rmse(var, models, dataset, out_dir, suffix, plot_ci=False):
     """
     Plot RMSE for each lead time.
     """
     plt.figure(figsize=(5.5, 4))
     for model in models:
         json_path = os.path.join(
-            "data", dataset, "metrics", model, "sst_rmse.json"
+            "data", dataset, "metrics", model, f"{var}_rmse.json"
         )
         with open(json_path, "r") as jf:
             data = json.load(jf)
@@ -34,29 +34,33 @@ def plot_lead_rmse(models, dataset, out_dir, plot_ci=False):
             ci_upper = np.array(data["ci_upper"][:n_lead])
             plt.fill_between(x, ci_lower, ci_upper, alpha=0.3)
 
-    plt.axvline(x=10, color="gray", linestyle="--")
+    plt.axvline(x=10, color="gray", linestyle="--", zorder=0)
     plt.xticks(np.arange(1, n_lead + 1, 2))
     plt.xticks(np.arange(1, n_lead), minor=True)
-    plt.ylim(top=1.3)
-    plt.xlabel("Lead Time (days)")
-    plt.ylabel("RMSE (°C)")
+    plt.xlabel("Lead time (days)")
+    if var == "sst":
+        plt.ylabel("RMSE (°C)")
+    else:
+        plt.ylabel("RMSE (m)")
     plt.legend()
     plt.tight_layout()
-    save_path = os.path.join(out_dir, "sst_rmse.png")
+    save_path = os.path.join(out_dir, f"{var}_rmse_{suffix}.png")
     plt.savefig(save_path)
     plt.close()
 
 
-def plot_spatial_rmse_diff(model, baseline, dataset, out_dir, leads=[1, 5, 10]):
+def plot_spatial_rmse_diff(
+    var, model, baseline, dataset, out_dir, leads=[1, 5, 10]
+):
     """
     Load the spatial RMSE for model and baseline from their NetCDF files,
     and plot the normalized difference for the selected lead times.
     """
     nc_model = os.path.join(
-        "data", dataset, "metrics", model, "sst_spatial_rmse.nc"
+        "data", dataset, "metrics", model, f"{var}_spatial_rmse.nc"
     )
     nc_baseline = os.path.join(
-        "data", dataset, "metrics", baseline, "sst_spatial_rmse.nc"
+        "data", dataset, "metrics", baseline, f"{var}_spatial_rmse.nc"
     )
 
     ds_model = xr.load_dataset(nc_model)
@@ -76,7 +80,10 @@ def plot_spatial_rmse_diff(model, baseline, dataset, out_dir, leads=[1, 5, 10]):
 
     # Determine global symmetric limits across the selected leads
     all_vals = np.concatenate([np.ravel(diff.values) for diff in diff_list])
-    max_abs = np.nanmax(np.abs(all_vals))
+    if var == "sla":
+        max_abs = np.nanpercentile(np.abs(all_vals), 95)
+    else:
+        max_abs = np.nanmax(np.abs(all_vals))
     vmin, vmax = -max_abs, max_abs
 
     # Create a figure with one row per lead time
@@ -111,16 +118,21 @@ def plot_spatial_rmse_diff(model, baseline, dataset, out_dir, leads=[1, 5, 10]):
         )
         cb.set_label("Norm. RMSE Diff. (%)", fontsize=10)
 
-    fig.suptitle("Normalized RMSE Difference (SST)", fontsize=14)
-    save_path = os.path.join(out_dir, f"sst_rmse_diff_{model}_{baseline}.png")
+    save_path = os.path.join(out_dir, f"{var}_rmse_diff_{model}_{baseline}.png")
     plt.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Plot forecast SST results.")
+    parser = argparse.ArgumentParser(description="Plot forecast results.")
     parser.add_argument(
         "--dataset", default="mediterranean", help="Dataset name"
+    )
+    parser.add_argument(
+        "--var",
+        nargs="+",
+        choices=["sst", "sla"],
+        required=True,
     )
     parser.add_argument(
         "--leads",
@@ -152,7 +164,35 @@ if __name__ == "__main__":
         "persistence",
     ]
 
-    plot_lead_rmse(models, args.dataset, out_dir, plot_ci=args.plot_ci)
-    plot_spatial_rmse_diff(
-        "seacast", "med_phy", args.dataset, out_dir, leads=args.leads
-    )
+    for var in args.var:
+        plot_lead_rmse(
+            var,
+            models,
+            args.dataset,
+            out_dir,
+            suffix="models",
+            plot_ci=args.plot_ci,
+        )
+
+    models = [
+        "seacast",
+        "t2m_permuted",
+        "tau_permuted",
+        "msl_permuted",
+        "all_permuted",
+    ]
+
+    for var in args.var:
+        plot_lead_rmse(
+            var,
+            models,
+            args.dataset,
+            out_dir,
+            suffix="forcing",
+            plot_ci=args.plot_ci,
+        )
+
+    for model, baseline in [("seacast", "med_phy"), ("seacast", "seacast_ens")]:
+        plot_spatial_rmse_diff(
+            "sst", model, baseline, args.dataset, out_dir, leads=args.leads
+        )
