@@ -17,7 +17,9 @@ repos:
     hooks:
       - id: codespell
         description: Check for spelling errors
-        args: ['--skip=pyproject.toml']
+        args:
+          - --skip=pyproject.toml
+          - --ignore-words-list=PRES
 
   - repo: https://github.com/psf/black
     rev: 25.1.0

@@ -210,7 +210,14 @@ def compute_avg_group_mse(
 
 
 def compute_avg_group_acc(
-    forecast, analysis, feature_names, interior_mask, grid_weights, t_idx=None
+    forecast,
+    analysis,
+    feature_names,
+    interior_mask,
+    grid_weights,
+    climatology,
+    validity_dates,
+    t_idx=None,
 ):
     """
     Compute the average group ACC for groups: uo, vo, so, thetao.
@@ -219,6 +226,9 @@ def compute_avg_group_acc(
       A dict with keys for each group mapping to:
         - acc: a 1D numpy array (n_timesteps,) of ACC values.
     """
+    if t_idx is None:
+        t_idx = range(forecast.shape[0])
+
     groups = {"uo": [], "vo": [], "so": [], "thetao": []}
     for depth in constants.DEPTHS:
         groups["uo"].append(feature_names.index(f"uo_{round(depth)}"))
@@ -226,25 +236,34 @@ def compute_avg_group_acc(
         groups["so"].append(feature_names.index(f"so_{round(depth)}"))
         groups["thetao"].append(feature_names.index(f"thetao_{round(depth)}"))
 
-    if t_idx is None:
-        t_idx = range(forecast.shape[0])
-
-    results = {}
+    agg_acc = {}
     for group, indices in groups.items():
-        acc_list = []
-        for t in t_idx:
-            # Average over the group indices for each grid cell:
-            group_forecast = np.nanmean(
-                forecast[t][:, indices], axis=1
-            )  # (n_grid,)
-            group_analysis = np.nanmean(
-                analysis[t][:, indices], axis=1
-            )  # (n_grid,)
-            # Valid mask: require all features in the group to be valid
+        n_timesteps = len(t_idx)
+        group_acc = np.zeros(n_timesteps)
+        ci_lower = np.zeros(n_timesteps)
+        ci_upper = np.zeros(n_timesteps)
+
+        for j, t in enumerate(t_idx):
+            # Get the validity date for time step t and load daily climatology
+            date = validity_dates[t]
+            doy = date.timetuple().tm_yday
+            clim_file = os.path.join(climatology, f"doy{doy:03d}.npy")
+            daily_clim = np.load(clim_file)  # (n_grid, n_features)
+
+            # Compute anomalies for each feature in the group
+            f_anom = forecast[t][:, indices] - daily_clim[:, indices]
+            a_anom = analysis[t][:, indices] - daily_clim[:, indices]
+
+            # Compute group anomaly by averaging over features per grid cell
+            f_group = np.nanmean(f_anom, axis=1)  # (n_grid,)
+            a_group = np.nanmean(a_anom, axis=1)  # (n_grid,)
+
+            # Define a valid mask
             valid_mask = np.all(interior_mask[:, indices], axis=1)
-            f_valid = group_forecast[valid_mask]
-            a_valid = group_analysis[valid_mask]
+            f_valid = f_group[valid_mask]
+            a_valid = a_group[valid_mask]
             weights_valid = grid_weights[valid_mask]
+
             numerator = np.nansum(weights_valid * f_valid * a_valid)
             denominator = np.sqrt(
                 np.nansum(weights_valid * f_valid**2)
@@ -253,9 +272,16 @@ def compute_avg_group_acc(
                 acc_t = np.nan
             else:
                 acc_t = numerator / denominator
-            acc_list.append(acc_t)
-        results[group] = {"acc": np.array(acc_list)}
-    return results
+            group_acc[j] = acc_t
+            ci_lower[j] = acc_t
+            ci_upper[j] = acc_t
+
+        agg_acc[group] = {
+            "acc": group_acc,
+            "ci_lower": ci_lower,
+            "ci_upper": ci_upper,
+        }
+    return agg_acc
 
 
 def compute_group_bias(forecast, analysis, feature_names, sea_mask, t_idx):
@@ -406,6 +432,8 @@ def process_file(
         feature_names,
         interior_mask,
         grid_weights,
+        climatology,
+        validity_dates,
     )
     group_mse = compute_group_rmse(
         forecast,
@@ -505,9 +533,9 @@ def aggregate_avg_group_rmse(metrics_list, n_bootstrap=1000):
 
     Returns:
       A dict with keys for each group mapping to a dict with:
-        - "rmse": numpy array of aggregated RMSE values per time step.
-        - "ci_lower": numpy array of lower bounds (per time step).
-        - "ci_upper": numpy array of upper bounds (per time step).
+        - rmse: numpy array of aggregated RMSE values per time step.
+        - ci_lower: numpy array of lower bounds per time step.
+        - ci_upper: numpy array of upper bounds per time step.
     """
     aggregated = {}
     groups = ["uo", "vo", "so", "thetao"]

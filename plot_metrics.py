@@ -836,6 +836,7 @@ def plot_norm_rmse_diff_by_depth(
         ncols=ncols,
         figsize=(ncols * 2.9, nrows * 2.7),
         sharex=True,
+        sharey=True,
         constrained_layout=True,
     )
     axes = axes.flatten()

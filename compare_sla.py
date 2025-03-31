@@ -22,11 +22,9 @@ def read_npy_to_xarray_sla(file_path, sea_mask, init=False):
     date_str = filename.split(".")[0]
     start_date = datetime.strptime(date_str[-8:], "%Y%m%d")
 
-    # Load forecast data (time, n_grid, n_features)
+    data = np.load(file_path)  # (time, n_grid, n_features)
     if init:
-        data = np.load(file_path)[2:]
-    else:
-        data = np.load(file_path)
+        data = data[2:]
     n_time, _, _ = data.shape
 
     # Full horizontal grid dimensions
@@ -59,7 +57,7 @@ def read_npy_to_xarray_sla(file_path, sea_mask, init=False):
     return ds
 
 
-def compute_rmse_forecast_vs_obs_over_samples_sla(
+def compute_sla_error(
     forecast_files,
     sla_obs_file,
     mdt_mod_file,
@@ -79,9 +77,10 @@ def compute_rmse_forecast_vs_obs_over_samples_sla(
     ds_mdt = ds_mdt.where(sea_mask.isel(depth=0), drop=True)
     mdt = ds_mdt["mdt"]
 
-    lead_sq_errors_list = []  # (n_lead,) per sample
+    lead_sq_errors_list = []  # list of (n_lead,) arrays
     forecast_times = None
 
+    # Loop over forecast sample files
     for forecast_file in forecast_files:
         print(f"Processing: {forecast_file}", flush=True)
         # Read forecast sample and compute model SLA as (zos - mdt)
@@ -93,50 +92,80 @@ def compute_rmse_forecast_vs_obs_over_samples_sla(
         if max_lead is not None:
             sla_mod = sla_mod.isel(time=slice(0, max_lead))
 
-        # Use the same forecast times for all files
+        # Use the same forecast times for all samples
         if forecast_times is None:
             forecast_times = sla_mod.time.values
-        n_lead = sla_mod.time.size
+        n_lead = sla_mod.sizes["time"]
 
-        # Array to accumulate SE for each lead time in this sample
+        # Array to accumulate MSE for each lead time in this sample
         lead_sq = np.zeros(n_lead)
 
+        # Loop over forecast lead times
         for i, t in enumerate(sla_mod.time.values):
-            # Get observation SLA for time t
-            o_t = sla_obs.sel(time=t)
-
-            # Get model SLA for time t and interpolate onto the obs points
+            # Select model SLA field at time t
             f_t = sla_mod.sel(time=t)
-            f_t_interp = f_t.interp(
-                latitude=o_t.latitude, longitude=o_t.longitude
-            )
 
-            # Create a mask where the interpolation produced valid values
-            valid_mask = ~np.isnan(f_t_interp)
+            # Select all observation files for this time (file, obs)
+            o_t_all = sla_obs.sel(time=t)
+            file_errors = []
 
-            # Compute daily mean for obs only where the interpolation was valid
-            o_mean = o_t.where(valid_mask).mean(dim="obs", skipna=True)
-            o_anom = o_t - o_mean
+            # Loop over each file in the observation dataset
+            for file in o_t_all.file.values:
+                # Select observations for this file
+                o_t_file = o_t_all.sel(file=file)
 
-            # Compute daily mean for the model only over valid locations
-            f_mean = f_t_interp.where(valid_mask).mean(dim="obs", skipna=True)
-            f_anom = f_t_interp - f_mean
+                # Only consider valid files as they have been padded
+                if o_t_file.sizes["obs"] == 0 or o_t_file.isnull().all():
+                    continue
 
-            # Compute SE field of anomaly differences
-            err_sq = (f_anom - o_anom) ** 2
+                # Determine valid observation indices, also padded
+                valid = ~np.isnan(o_t_file)
+                if valid.sum() == 0:
+                    continue
 
-            # Compute spatial mean SE over the observation dimension
-            mse = err_sq.mean(dim="obs", skipna=True).values
-            lead_sq[i] = mse
+                # Extract valid latitudes and longitudes from this file
+                lat_valid = o_t_file.latitude.where(valid, drop=True)
+                lon_valid = o_t_file.longitude.where(valid, drop=True)
+
+                # Interpolate model field onto the valid observation points
+                f_t_interp = f_t.interp(latitude=lat_valid, longitude=lon_valid)
+
+                # Interp will produce NaN for points outside the model grid
+                interp_valid = ~np.isnan(f_t_interp.values)
+                if np.sum(interp_valid) == 0:
+                    continue
+
+                # Get indices where interpolation was successful
+                valid_idx = np.where(interp_valid)[0]
+                f_t_interp = f_t_interp.isel(obs=valid_idx)
+                # Use the valid interp indices on the already filtered obs
+                o_valid = o_t_file.where(valid, drop=True).isel(obs=valid_idx)
+
+                # Compute per-file means on the valid points
+                o_mean = o_valid.mean(dim="obs", skipna=True)
+                f_mean = f_t_interp.mean(skipna=True)
+
+                # Compute anomalies by subtracting the per-file mean
+                o_anom = o_valid - o_mean
+                f_anom = f_t_interp - f_mean
+
+                # Compute SE for this file and average
+                err_sq_file = (f_anom - o_anom) ** 2
+
+                file_errors.extend(err_sq_file)
+
+            # Average errors over files
+            lead_sq[i] = np.nanmean(file_errors)
 
         lead_sq_errors_list.append(lead_sq)
+        ds_forecast.close()
 
     # Convert the list of lead SE into an array (n_samples, n_lead)
     lead_sq_errors_arr = np.stack(lead_sq_errors_list, axis=0)
     mean_lead_mse = np.mean(lead_sq_errors_arr, axis=0)
     rmse_lead = np.sqrt(mean_lead_mse)
 
-    # Bootstrapping 1000 iterations to estimate the 50% confidence interval
+    # Bootstrap 1000 iterations to estimate the 50% CI
     bootstrap_iterations = 1000
     n_samples, n_lead = lead_sq_errors_arr.shape
     bootstrap_rmse = np.zeros((bootstrap_iterations, n_lead))
@@ -149,7 +178,7 @@ def compute_rmse_forecast_vs_obs_over_samples_sla(
     ci_lower = np.percentile(bootstrap_rmse, 25, axis=0)
     ci_upper = np.percentile(bootstrap_rmse, 75, axis=0)
 
-    # Build dictionary with lead-wise RMSE and confidence intervals
+    # Build dictionary with lead-wise RMSE and CI
     rmse_dict = {
         "rmse": rmse_lead.tolist(),
         "ci_lower": ci_lower.tolist(),
@@ -159,7 +188,7 @@ def compute_rmse_forecast_vs_obs_over_samples_sla(
     return rmse_dict
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="mediterranean")
     parser.add_argument("--forecast", default="seacast")
@@ -193,7 +222,7 @@ if __name__ == "__main__":
     mask = bathy_data.where(bathy_data.mask, drop=True).mask
 
     # Compute SLA RMSE over forecast samples
-    rmse_dict = compute_rmse_forecast_vs_obs_over_samples_sla(
+    rmse_dict = compute_sla_error(
         forecast_files=forecast_files,
         sla_obs_file=sla_obs_file,
         mdt_mod_file=mdt_mod_file,
@@ -211,3 +240,7 @@ if __name__ == "__main__":
     with open(json_path, "w") as jf:
         json.dump(rmse_dict, jf, indent=2)
     print(f"Saved lead-wise SLA RMSE with CI to {json_path}")
+
+
+if __name__ == "__main__":
+    main()

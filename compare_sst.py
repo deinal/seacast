@@ -23,11 +23,9 @@ def read_npy_to_xarray(file_path, sea_mask, init=False):
     date_str = filename.split(".")[0]
     start_date = datetime.strptime(date_str[-8:], "%Y%m%d")
 
-    # Load forecast data (time, n_grid, n_features)
+    data = np.load(file_path)  # (time, n_grid, n_features)
     if init:
-        data = np.load(file_path)[2:]
-    else:
-        data = np.load(file_path)
+        data = data[2:]
     n_time, _, _ = data.shape
 
     # Full horizontal grid dimensions
@@ -60,7 +58,7 @@ def read_npy_to_xarray(file_path, sea_mask, init=False):
     return ds
 
 
-def compute_rmse_forecast_vs_obs_over_samples(
+def compute_sst_error(
     forecast_files, sst_obs_file, sea_mask, init_flag=False, max_lead=None
 ):
     """
@@ -174,7 +172,7 @@ def compute_rmse_forecast_vs_obs_over_samples(
     return rmse_dict, spatial_rmse
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="mediterranean")
     parser.add_argument("--forecast", default="seacast")
@@ -205,7 +203,7 @@ if __name__ == "__main__":
     mask = bathy_data.where(bathy_data.mask, drop=True).mask
 
     # Compute RMSE over all forecast sample files
-    rmse_dict, spatial_rmse = compute_rmse_forecast_vs_obs_over_samples(
+    rmse_dict, spatial_rmse = compute_sst_error(
         forecast_files=forecast_files,
         sst_obs_file=sst_obs_file,
         sea_mask=mask,
@@ -228,3 +226,7 @@ if __name__ == "__main__":
     nc_lead_path = os.path.join(out_dir, "sst_spatial_rmse.nc")
     ds_out_lead.to_netcdf(nc_lead_path)
     print(f"Saved spatial RMSE by lead time to {nc_lead_path}")
+
+
+if __name__ == "__main__":
+    main()

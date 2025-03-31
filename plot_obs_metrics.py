@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
+# First-party
+from neural_lam import constants
+
 
 def plot_lead_rmse(var, models, dataset, out_dir, suffix, plot_ci=False):
     """
@@ -40,9 +43,14 @@ def plot_lead_rmse(var, models, dataset, out_dir, suffix, plot_ci=False):
     plt.xlabel("Lead time (days)")
     if var == "sst":
         plt.ylabel("RMSE (°C)")
-    else:
+    elif var == "sla":
         plt.ylabel("RMSE (m)")
+    else:
+        param_idx = constants.PARAM_NAMES_SHORT.index(var.split("_")[-1])
+        unit = constants.PARAM_UNITS[param_idx]
+        plt.ylabel(f"RMSE ({unit})")
     plt.legend()
+
     plt.tight_layout()
     save_path = os.path.join(out_dir, f"{var}_rmse_{suffix}.png")
     plt.savefig(save_path)
@@ -80,10 +88,7 @@ def plot_spatial_rmse_diff(
 
     # Determine global symmetric limits across the selected leads
     all_vals = np.concatenate([np.ravel(diff.values) for diff in diff_list])
-    if var == "sla":
-        max_abs = np.nanpercentile(np.abs(all_vals), 95)
-    else:
-        max_abs = np.nanmax(np.abs(all_vals))
+    max_abs = np.nanmax(np.abs(all_vals))
     vmin, vmax = -max_abs, max_abs
 
     # Create a figure with one row per lead time
@@ -131,7 +136,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--var",
         nargs="+",
-        choices=["sst", "sla"],
+        choices=[
+            "sst",
+            "sla",
+            "in_situ_uo",
+            "in_situ_vo",
+            "in_situ_so",
+            "in_situ_thetao",
+        ],
         required=True,
     )
     parser.add_argument(
