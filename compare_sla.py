@@ -8,6 +8,8 @@ from glob import glob
 # Third-party
 import numpy as np
 import xarray as xr
+from dask import compute, delayed
+from dask.diagnostics import ProgressBar
 
 # First-party
 from neural_lam import constants
@@ -57,6 +59,140 @@ def read_npy_to_xarray_sla(file_path, sea_mask, init=False):
     return ds
 
 
+def split_track_by_land(lat_arr, lon_arr, sea_indicator, min_points=10):
+    """
+    Splits a track (given by arrays of lat and lon) into segments
+    based on the sea mask. A segment is kept only if all its points
+    are over sea. If a gap is encountered, the track is split.
+    Segments with fewer than min_points are discarded.
+
+    Parameters:
+      lat_arr: numpy array of latitudes.
+      lon_arr: numpy array of longitudes.
+      sea_indicator: boolean numpy array indicating True for sea.
+      min_points: minimum number of points required to use the segment.
+
+    Returns:
+      A list of segments, where each segment is a list of indices.
+    """
+    segments = []
+    current_seg = []
+    for i, is_sea in enumerate(sea_indicator):
+        if is_sea:
+            current_seg.append(i)
+        else:
+            if len(current_seg) >= min_points:
+                segments.append(current_seg)
+            current_seg = []
+    if len(current_seg) >= min_points:
+        segments.append(current_seg)
+    return segments
+
+
+@delayed
+def process_forecast_file(
+    forecast_file,
+    sla_obs,
+    mdt,
+    sea_mask,
+    init_flag=False,
+    max_lead=None,
+):
+    print(f"Processing: {forecast_file}", flush=True)
+    # Read forecast sample and compute model SLA as (zos - mdt)
+    ds_forecast = read_npy_to_xarray_sla(
+        forecast_file, sea_mask, init=init_flag
+    )
+    sla_mod = ds_forecast["zos"] - mdt
+
+    if max_lead is not None:
+        sla_mod = sla_mod.isel(time=slice(0, max_lead))
+
+    n_lead = sla_mod.sizes["time"]
+
+    # Array to accumulate SE for each lead time in this sample
+    lead_sq = np.zeros(n_lead)
+
+    # Loop over forecast lead times
+    for i, t in enumerate(sla_mod.time.values):
+        # Select model SLA field at time t
+        f_t = sla_mod.sel(time=t)
+
+        # Select all observation files for this time (file, obs)
+        o_t_all = sla_obs.sel(time=t)
+        file_errors = []
+
+        # Loop over each file in the observation dataset
+        for file in o_t_all.file.values:
+            # Select observations for this file
+            o_t_file = o_t_all.sel(file=file)
+
+            # Only consider valid files as they have been padded
+            if o_t_file.sizes["obs"] == 0 or o_t_file.isnull().all():
+                continue
+
+            # Determine valid observation indices, also padded
+            valid = ~np.isnan(o_t_file)
+            if valid.sum() == 0:
+                continue
+
+            # Extract valid latitudes and longitudes from this file
+            lat_valid = o_t_file.latitude.where(valid, drop=True)
+            lon_valid = o_t_file.longitude.where(valid, drop=True)
+
+            # Interpolate the sea mask onto these valid observation point
+            sea_vals = (
+                sea_mask.isel(depth=0)
+                .interp(latitude=lat_valid, longitude=lon_valid)
+                .values
+            )
+            is_sea = sea_vals > 0.5  # True if sea
+
+            # Split the track based on land
+            segments = split_track_by_land(
+                lat_valid.values, lon_valid.values, is_sea
+            )
+            if not segments:
+                continue
+
+            # Loop over each segment and compute error
+            for seg in segments:
+                # Select the segment's lat/lon coordinates
+                lat_seg = lat_valid.isel(obs=seg)
+                lon_seg = lon_valid.isel(obs=seg)
+
+                # Interpolate model field onto the segment's observation points
+                f_t_interp_seg = f_t.interp(latitude=lat_seg, longitude=lon_seg)
+                interp_valid = ~np.isnan(f_t_interp_seg.values)
+                if np.sum(interp_valid) == 0:
+                    continue
+                valid_idx = np.where(interp_valid)[0]
+                f_t_interp_seg = f_t_interp_seg.isel(obs=valid_idx)
+                o_seg = (
+                    o_t_file.where(valid, drop=True)
+                    .isel(obs=seg)
+                    .isel(obs=valid_idx)
+                )
+
+                # Compute per-segment means on the valid points
+                o_mean = o_seg.mean(dim="obs", skipna=True)
+                f_mean = f_t_interp_seg.mean(skipna=True)
+
+                # Compute anomalies by subtracting the per-segment mean
+                o_anom = o_seg - o_mean
+                f_anom = f_t_interp_seg - f_mean
+
+                # Compute squared error for this segment
+                err_sq_seg = (f_anom - o_anom) ** 2
+                file_errors.extend(err_sq_seg)
+
+        # Average errors over all files and segments for this lead time
+        lead_sq[i] = np.nanmean(file_errors)
+        ds_forecast.close()
+
+    return lead_sq
+
+
 def compute_sla_error(
     forecast_files,
     sla_obs_file,
@@ -77,103 +213,38 @@ def compute_sla_error(
     ds_mdt = ds_mdt.where(sea_mask.isel(depth=0), drop=True)
     mdt = ds_mdt["mdt"]
 
-    lead_sq_errors_list = []  # list of (n_lead,) arrays
-    forecast_times = None
-
-    # Loop over forecast sample files
+    delayed_lead_errors_list = []
     for forecast_file in forecast_files:
-        print(f"Processing: {forecast_file}", flush=True)
-        # Read forecast sample and compute model SLA as (zos - mdt)
-        ds_forecast = read_npy_to_xarray_sla(
-            forecast_file, sea_mask, init=init_flag
+        delayed_lead_errors_list.append(
+            process_forecast_file(
+                forecast_file,
+                sla_obs,
+                mdt,
+                sea_mask,
+                init_flag=False,
+                max_lead=None,
+            )
         )
-        sla_mod = ds_forecast["zos"] - mdt
 
-        if max_lead is not None:
-            sla_mod = sla_mod.isel(time=slice(0, max_lead))
-
-        # Use the same forecast times for all samples
-        if forecast_times is None:
-            forecast_times = sla_mod.time.values
-        n_lead = sla_mod.sizes["time"]
-
-        # Array to accumulate MSE for each lead time in this sample
-        lead_sq = np.zeros(n_lead)
-
-        # Loop over forecast lead times
-        for i, t in enumerate(sla_mod.time.values):
-            # Select model SLA field at time t
-            f_t = sla_mod.sel(time=t)
-
-            # Select all observation files for this time (file, obs)
-            o_t_all = sla_obs.sel(time=t)
-            file_errors = []
-
-            # Loop over each file in the observation dataset
-            for file in o_t_all.file.values:
-                # Select observations for this file
-                o_t_file = o_t_all.sel(file=file)
-
-                # Only consider valid files as they have been padded
-                if o_t_file.sizes["obs"] == 0 or o_t_file.isnull().all():
-                    continue
-
-                # Determine valid observation indices, also padded
-                valid = ~np.isnan(o_t_file)
-                if valid.sum() == 0:
-                    continue
-
-                # Extract valid latitudes and longitudes from this file
-                lat_valid = o_t_file.latitude.where(valid, drop=True)
-                lon_valid = o_t_file.longitude.where(valid, drop=True)
-
-                # Interpolate model field onto the valid observation points
-                f_t_interp = f_t.interp(latitude=lat_valid, longitude=lon_valid)
-
-                # Interp will produce NaN for points outside the model grid
-                interp_valid = ~np.isnan(f_t_interp.values)
-                if np.sum(interp_valid) == 0:
-                    continue
-
-                # Get indices where interpolation was successful
-                valid_idx = np.where(interp_valid)[0]
-                f_t_interp = f_t_interp.isel(obs=valid_idx)
-                # Use the valid interp indices on the already filtered obs
-                o_valid = o_t_file.where(valid, drop=True).isel(obs=valid_idx)
-
-                # Compute per-file means on the valid points
-                o_mean = o_valid.mean(dim="obs", skipna=True)
-                f_mean = f_t_interp.mean(skipna=True)
-
-                # Compute anomalies by subtracting the per-file mean
-                o_anom = o_valid - o_mean
-                f_anom = f_t_interp - f_mean
-
-                # Compute SE for this file and average
-                err_sq_file = (f_anom - o_anom) ** 2
-
-                file_errors.extend(err_sq_file)
-
-            # Average errors over files
-            lead_sq[i] = np.nanmean(file_errors)
-
-        lead_sq_errors_list.append(lead_sq)
-        ds_forecast.close()
+    with ProgressBar():
+        lead_errors_list = compute(
+            *delayed_lead_errors_list, scheduler="processes"
+        )
 
     # Convert the list of lead SE into an array (n_samples, n_lead)
-    lead_sq_errors_arr = np.stack(lead_sq_errors_list, axis=0)
-    mean_lead_mse = np.mean(lead_sq_errors_arr, axis=0)
+    lead_errors_arr = np.stack(lead_errors_list, axis=0)
+    mean_lead_mse = np.mean(lead_errors_arr, axis=0)
     rmse_lead = np.sqrt(mean_lead_mse)
 
     # Bootstrap 1000 iterations to estimate the 50% CI
     bootstrap_iterations = 1000
-    n_samples, n_lead = lead_sq_errors_arr.shape
+    n_samples, n_lead = lead_errors_arr.shape
     bootstrap_rmse = np.zeros((bootstrap_iterations, n_lead))
     for i in range(bootstrap_iterations):
         sample_indices = np.random.choice(
             n_samples, size=n_samples, replace=True
         )
-        sample_mean_mse = np.mean(lead_sq_errors_arr[sample_indices, :], axis=0)
+        sample_mean_mse = np.mean(lead_errors_arr[sample_indices, :], axis=0)
         bootstrap_rmse[i, :] = np.sqrt(sample_mean_mse)
     ci_lower = np.percentile(bootstrap_rmse, 25, axis=0)
     ci_upper = np.percentile(bootstrap_rmse, 75, axis=0)

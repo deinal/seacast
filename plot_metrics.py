@@ -882,22 +882,22 @@ def plot_norm_rmse_diff_by_depth(
                 ) / baseline_vals
                 (line,) = ax.plot(
                     x,
-                    norm_diff,
+                    100 * norm_diff,
                     linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
                 )
                 ax.fill_between(
                     x,
-                    norm_diff_lower,
-                    norm_diff_upper,
+                    100 * norm_diff_lower,
+                    100 * norm_diff_upper,
                     color=line.get_color(),
                     alpha=0.3,
                 )
             else:
                 ax.plot(
                     x,
-                    norm_diff,
+                    100 * norm_diff,
                     linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
@@ -924,7 +924,7 @@ def plot_norm_rmse_diff_by_depth(
         if (i // ncols) == nrows - 1:
             ax.set_xlabel("Lead time (days)", fontsize=fs)
         if (i % ncols) == 0:
-            ax.set_ylabel("Norm. RMSE diff.", fontsize=fs)
+            ax.set_ylabel("Norm. RMSE diff. (%)", fontsize=fs)
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
@@ -995,22 +995,22 @@ def plot_norm_rmse_diff_single(
             ) / baseline_vals
             (line,) = plt.plot(
                 x,
-                norm_diff,
+                100 * norm_diff,
                 linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
             )
             plt.fill_between(
                 x,
-                norm_diff_lower,
-                norm_diff_upper,
+                100 * norm_diff_lower,
+                100 * norm_diff_upper,
                 color=line.get_color(),
                 alpha=0.3,
             )
         else:
             plt.plot(
                 x,
-                norm_diff,
+                100 * norm_diff,
                 linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
@@ -1025,7 +1025,7 @@ def plot_norm_rmse_diff_single(
         label=baseline_label,
     )
     plt.xlabel("Lead time (days)", fontsize=fs)
-    plt.ylabel("Norm. RMSE diff.", fontsize=fs)
+    plt.ylabel("Norm. RMSE diff. (%)", fontsize=fs)
 
     ax = plt.gca()
     ax.set_xticks(np.arange(1, n_steps + 1), minor=True)

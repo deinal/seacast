@@ -30,7 +30,7 @@ def plot_lead_rmse(var, models, dataset, out_dir, suffix, plot_ci=False):
         n_lead = min(len(rmse), 15)
         x = np.arange(1, n_lead + 1)
         y = np.array(rmse[:n_lead])
-        plt.plot(x, y, label=model)
+        plt.plot(x, y, lw=2, label=model)
 
         if plot_ci and "ci_lower" in data and "ci_upper" in data:
             ci_lower = np.array(data["ci_lower"][:n_lead])
@@ -42,18 +42,82 @@ def plot_lead_rmse(var, models, dataset, out_dir, suffix, plot_ci=False):
     plt.xticks(np.arange(1, n_lead), minor=True)
     plt.xlabel("Lead time (days)")
     if var == "sst":
-        plt.ylabel("RMSE (°C)")
+        unit = "°C"
     elif var == "sla":
-        plt.ylabel("RMSE (m)")
+        unit = "m"
     else:
         param_idx = constants.PARAM_NAMES_SHORT.index(var.split("_")[-1])
         unit = constants.PARAM_UNITS[param_idx]
-        plt.ylabel(f"RMSE ({unit})")
+    plt.ylabel(f"RMSE ({unit})")
     plt.legend()
 
     plt.tight_layout()
     save_path = os.path.join(out_dir, f"{var}_rmse_{suffix}.png")
     plt.savefig(save_path)
+    plt.close()
+
+
+def plot_norm_rmse_diff(
+    var, models, baseline, dataset, out_dir, suffix, plot_ci=False
+):
+    """
+    Plot normalized RMSE diff computed as
+    (model_rmse - baseline_rmse) / baseline_rmse.
+    """
+
+    baseline_json_path = os.path.join(
+        "data", dataset, "metrics", baseline, f"{var}_rmse.json"
+    )
+    with open(baseline_json_path, "r") as jf:
+        baseline_data = json.load(jf)
+    baseline_rmse = np.array(baseline_data["rmse"])
+    n_lead = min(len(baseline_rmse), 15)
+    x = np.arange(1, n_lead + 1)
+
+    plt.figure(figsize=(5.5, 4))
+
+    plt.plot(
+        x,
+        np.zeros(len(x)),
+        color="gray",
+        linestyle="--",
+        label=baseline,
+        zorder=0,
+    )
+
+    for model in models:
+        model_json_path = os.path.join(
+            "data", dataset, "metrics", model, f"{var}_rmse.json"
+        )
+        with open(model_json_path, "r") as jf:
+            model_data = json.load(jf)
+        model_rmse = np.array(model_data["rmse"][:n_lead])
+        norm_diff = (model_rmse - baseline_rmse[:n_lead]) / baseline_rmse[
+            :n_lead
+        ]
+        plt.plot(x, 100 * norm_diff, lw=2, label=model)
+
+        if plot_ci and "ci_lower" in model_data and "ci_upper" in model_data:
+            ci_lower = np.array(model_data["ci_lower"][:n_lead])
+            ci_upper = np.array(model_data["ci_upper"][:n_lead])
+            norm_ci_lower = (ci_lower - baseline_rmse[:n_lead]) / baseline_rmse[
+                :n_lead
+            ]
+            norm_ci_upper = (ci_upper - baseline_rmse[:n_lead]) / baseline_rmse[
+                :n_lead
+            ]
+            plt.fill_between(
+                x, 100 * norm_ci_lower, 100 * norm_ci_upper, alpha=0.3
+            )
+
+    plt.xticks(np.arange(1, n_lead + 1, 2))
+    plt.xlabel("Lead time (days)")
+    plt.ylabel("Norm. RMSE diff. (%)")
+    plt.legend()
+    plt.tight_layout()
+
+    save_path = os.path.join(out_dir, f"{var}_norm_rmse_diff.png")
+    plt.savefig(save_path, bbox_inches="tight")
     plt.close()
 
 
@@ -171,7 +235,6 @@ if __name__ == "__main__":
     models = [
         "seacast",
         "med_phy",
-        "seacast_ens",
         "seacast_analysis",
         "persistence",
     ]
@@ -202,6 +265,23 @@ if __name__ == "__main__":
             out_dir,
             suffix="forcing",
             plot_ci=args.plot_ci,
+        )
+
+    baseline = "seacast"
+    forcing_models = [
+        "t2m_permuted",
+        "tau_permuted",
+        "msl_permuted",
+        "all_permuted",
+    ]
+    for var in args.var:
+        plot_norm_rmse_diff(
+            var,
+            forcing_models,
+            baseline,
+            args.dataset,
+            out_dir,
+            suffix="forcing",
         )
 
     for model, baseline in [("seacast", "med_phy"), ("seacast", "seacast_ens")]:
