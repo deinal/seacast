@@ -4,11 +4,8 @@ import json
 import os
 
 # Third-party
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
 
 # First-party
 from neural_lam import constants
@@ -121,77 +118,6 @@ def plot_norm_rmse_diff(
     plt.close()
 
 
-def plot_spatial_rmse_diff(
-    var, model, baseline, dataset, out_dir, leads=[1, 5, 10]
-):
-    """
-    Load the spatial RMSE for model and baseline from their NetCDF files,
-    and plot the normalized difference for the selected lead times.
-    """
-    nc_model = os.path.join(
-        "data", dataset, "metrics", model, f"{var}_spatial_rmse.nc"
-    )
-    nc_baseline = os.path.join(
-        "data", dataset, "metrics", baseline, f"{var}_spatial_rmse.nc"
-    )
-
-    ds_model = xr.load_dataset(nc_model)
-    ds_baseline = xr.load_dataset(nc_baseline)
-
-    da_model = ds_model["rmse"]
-    da_baseline = ds_baseline["rmse"]
-
-    # Compute normalized difference for each lead
-    diff_list = []
-    for lead in leads:
-        idx = lead - 1
-        diff = (
-            da_model.isel(time=idx) - da_baseline.isel(time=idx)
-        ) / da_baseline.isel(time=idx)
-        diff_list.append(diff)
-
-    # Determine global symmetric limits across the selected leads
-    all_vals = np.concatenate([np.ravel(diff.values) for diff in diff_list])
-    max_abs = np.nanmax(np.abs(all_vals))
-    vmin, vmax = -max_abs, max_abs
-
-    # Create a figure with one row per lead time
-    proj = ccrs.PlateCarree()
-    n_rows = len(leads)
-    fig, axes = plt.subplots(
-        nrows=n_rows,
-        ncols=1,
-        figsize=(8, 4 * n_rows),
-        subplot_kw={"projection": proj},
-        constrained_layout=True,
-    )
-    if n_rows == 1:
-        axes = [axes]
-
-    for ax, lead, diff in zip(axes, leads, diff_list):
-        ax.coastlines(resolution="10m", linewidth=1)
-        ax.add_feature(cfeature.LAND, facecolor="whitesmoke")
-        im = ax.pcolormesh(
-            diff.longitude,
-            diff.latitude,
-            diff,
-            cmap="RdBu_r",
-            shading="auto",
-            transform=proj,
-            vmin=vmin,
-            vmax=vmax,
-        )
-        ax.set_title(f"Lead Time {lead} days", fontsize=12)
-        cb = fig.colorbar(
-            im, ax=ax, orientation="vertical", shrink=0.7, pad=0.02
-        )
-        cb.set_label("Norm. RMSE Diff. (%)", fontsize=10)
-
-    save_path = os.path.join(out_dir, f"{var}_rmse_diff_{model}_{baseline}.png")
-    plt.savefig(save_path, bbox_inches="tight")
-    plt.close(fig)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot forecast results.")
     parser.add_argument(
@@ -209,13 +135,6 @@ if __name__ == "__main__":
             "in_situ_thetao",
         ],
         required=True,
-    )
-    parser.add_argument(
-        "--leads",
-        nargs="+",
-        type=int,
-        default=[1, 5, 10],
-        help="Lead times to plot",
     )
     parser.add_argument(
         "--out_dir",
@@ -282,9 +201,4 @@ if __name__ == "__main__":
             args.dataset,
             out_dir,
             suffix="forcing",
-        )
-
-    for model, baseline in [("seacast", "med_phy"), ("seacast", "seacast_ens")]:
-        plot_spatial_rmse_diff(
-            "sst", model, baseline, args.dataset, out_dir, leads=args.leads
         )

@@ -59,7 +59,7 @@ def read_npy_to_xarray_sla(file_path, sea_mask, init=False):
     return ds
 
 
-def split_track_by_land(lat_arr, lon_arr, sea_indicator, min_points=10):
+def split_track_by_land(lat_arr, lon_arr, sea_indicator, min_points=4):
     """
     Splits a track (given by arrays of lat and lon) into segments
     based on the sea mask. A segment is kept only if all its points
@@ -95,8 +95,8 @@ def process_forecast_file(
     sla_obs,
     mdt,
     sea_mask,
-    init_flag=False,
-    max_lead=None,
+    init_flag,
+    max_lead,
 ):
     print(f"Processing: {forecast_file}", flush=True)
     # Read forecast sample and compute model SLA as (zos - mdt)
@@ -221,8 +221,8 @@ def compute_sla_error(
                 sla_obs,
                 mdt,
                 sea_mask,
-                init_flag=False,
-                max_lead=None,
+                init_flag,
+                max_lead,
             )
         )
 

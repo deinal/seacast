@@ -11,7 +11,7 @@ import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 # First-party
 from neural_lam import constants
@@ -117,7 +117,7 @@ def read_npy_to_xarray(file_path, sea_mask, init=False):
 
 
 def plot_forecast(
-    ds, analysis_ds, param, lead_indices, depth_index=2, model="seacast"
+    ds, analysis_ds, param, lead_indices, depth_index=2, model="seacast", fs=14
 ):
     """
     Plot a stack of forecast fields and bias to analysis.
@@ -164,7 +164,7 @@ def plot_forecast(
     fig, axes = plt.subplots(
         nrows=n_rows,
         ncols=2,
-        figsize=(20, 4 * n_rows),
+        figsize=(21, 4 * n_rows),
         constrained_layout=True,
         sharex=True,
         sharey=True,
@@ -187,12 +187,22 @@ def plot_forecast(
             vmin=fc_vmin,
             vmax=fc_vmax,
         )
-        ax_fc.set_title(f"{model} {param}{depth} t={idx+1} ({unit})")
+        var_name = constants.PLOT_NAMES_MAP[param]
+        ax_fc.set_title(
+            f"Forecasted {var_name} at {depth}m, day {idx+1}",
+            fontsize=fs,
+        )
         ax_fc.coastlines(resolution="10m", linewidth=1)
         ax_fc.add_feature(cfeature.LAND, facecolor="whitesmoke")
-        fig.colorbar(
-            im_fc, ax=ax_fc, orientation="vertical", shrink=0.7, pad=0.02
+        cbar_fc = fig.colorbar(
+            im_fc,
+            ax=ax_fc,
+            orientation="vertical",
+            shrink=0.905,
+            aspect=25,
+            pad=0.02,
         )
+        cbar_fc.ax.set_ylabel(unit)
 
         # Bias
         ana_data = analysis_ds[param].sel(time=ds.time[idx])
@@ -208,12 +218,22 @@ def plot_forecast(
             vmin=diff_vmin,
             vmax=diff_vmax,
         )
-        ax_diff.set_title(f"Bias {param}{depth} t={idx+1} ({unit})")
+        var_name = constants.PLOT_NAMES_MAP[param]
+        ax_diff.set_title(
+            f"Bias of {var_name} at {depth}m, day {idx+1}",
+            fontsize=fs,
+        )
         ax_diff.coastlines(resolution="10m", linewidth=1)
         ax_diff.add_feature(cfeature.LAND, facecolor="whitesmoke")
-        fig.colorbar(
-            im_diff, ax=ax_diff, orientation="vertical", shrink=0.7, pad=0.02
+        cbar_diff = fig.colorbar(
+            im_diff,
+            ax=ax_diff,
+            orientation="vertical",
+            shrink=0.905,
+            aspect=25,
+            pad=0.02,
         )
+        cbar_diff.ax.set_ylabel(unit)
 
     # Compute tick positions for latitude and longitude
     lat_min, lat_max = extent[2], extent[3]
@@ -236,15 +256,19 @@ def plot_forecast(
     for i in range(nrows):
         for j in range(ncols):
             if i == nrows - 1:
-                axes[i, j].set_xlabel("Longitude (°)")
+                axes[i, j].set_xlabel("Longitude (°)", fontsize=fs)
                 axes[i, j].tick_params(labelbottom=True)
-                axes[i, j].set_xticklabels([str(int(x)) for x in lon_ticks])
+                axes[i, j].set_xticklabels(
+                    [str(int(x)) for x in lon_ticks], fontsize=fs
+                )
             else:
                 axes[i, j].tick_params(labelbottom=False)
             if j == 0:
-                axes[i, j].set_ylabel("Latitude (°)")
+                axes[i, j].set_ylabel("Latitude (°)", fontsize=fs)
                 axes[i, j].tick_params(labelleft=True)
-                axes[i, j].set_yticklabels([str(int(y)) for y in lat_ticks])
+                axes[i, j].set_yticklabels(
+                    [str(int(y)) for y in lat_ticks], fontsize=fs
+                )
             else:
                 axes[i, j].tick_params(labelleft=False)
 
@@ -263,7 +287,7 @@ def plot_forecast_vertical(
     lead_indices,
     direction="zonal",
     suffix="forecast",
-    fs=12,
+    fs=14,
 ):
     """
     Plot average over zonal or meridional direction.
@@ -285,7 +309,7 @@ def plot_forecast_vertical(
         horiz_dim = "latitude"
         x_coord_name = "longitude"
         xlabel = "Longitude (°)"
-        fig_width = 18
+        fig_width = 19
         locator = MultipleLocator(5)
     else:
         raise ValueError("direction must be 'zonal' or 'meridional'")
@@ -348,7 +372,10 @@ def plot_forecast_vertical(
             vmax=fc_vmax,
             extent=extent,
         )
-        ax_fc.set_title(f"Forecast {param} t={idx+1} ({unit})", fontsize=fs)
+        ax_fc.set_title(
+            f"Forecasted {constants.PLOT_NAMES_MAP[param]}, day {idx+1}",
+            fontsize=fs,
+        )
         ax_fc.set_ylabel("Depth (m)", fontsize=fs)
         ax_fc.xaxis.set_major_locator(locator)
         if i == n_rows - 1:
@@ -358,9 +385,15 @@ def plot_forecast_vertical(
 
         ax_fc.set_yticks(y_positions)
         ax_fc.set_yticklabels(yticklabels)
-        fig.colorbar(
-            im_fc, ax=ax_fc, orientation="vertical", shrink=0.7, pad=0.02
+        cbar_fc = fig.colorbar(
+            im_fc,
+            ax=ax_fc,
+            orientation="vertical",
+            shrink=0.855,
+            aspect=25,
+            pad=0.02,
         )
+        cbar_fc.ax.set_ylabel(unit)
 
         # Bias panel
         ax_bias = axes[i, 1]
@@ -372,7 +405,10 @@ def plot_forecast_vertical(
             vmax=bias_vmax,
             extent=extent,
         )
-        ax_bias.set_title(f"Bias {param} t={idx+1} ({unit})", fontsize=fs)
+        ax_bias.set_title(
+            f"Bias of {constants.PLOT_NAMES_MAP[param]}, day {idx+1}",
+            fontsize=fs,
+        )
         ax_bias.xaxis.set_major_locator(locator)
         if i == n_rows - 1:
             ax_bias.set_xlabel(xlabel, fontsize=fs)
@@ -380,12 +416,15 @@ def plot_forecast_vertical(
             ax_bias.set_xticklabels([])
         ax_bias.set_yticks(y_positions)
         ax_bias.set_yticklabels(yticklabels)
-        fig.colorbar(
-            im_bias, ax=ax_bias, orientation="vertical", shrink=0.7, pad=0.02
+        cbar_bias = fig.colorbar(
+            im_bias,
+            ax=ax_bias,
+            orientation="vertical",
+            shrink=0.855,
+            aspect=25,
+            pad=0.02,
         )
-
-    # Third-party
-    from matplotlib.ticker import FuncFormatter
+        cbar_bias.ax.set_ylabel(unit)
 
     formatter = FuncFormatter(lambda x, pos: f"{x:.0f}")
     for ax in axes[-1, :]:
@@ -545,6 +584,7 @@ def plot_metric_by_depth(
     depths=None,
     fs=12,
     fill_between=False,
+    color_map=None,
 ):
     """
     Create one figure for a given variable with a grid of subplots.
@@ -567,20 +607,26 @@ def plot_metric_by_depth(
     # Sort by depth (ascending)
     sorted_pairs = sorted(zip(depths_list, var_indices), key=lambda x: x[0])
     sorted_depths, sorted_var_indices = zip(*sorted_pairs)
+
+    # Use only every other depth
+    sorted_depths = sorted_depths[::2]
+    sorted_var_indices = sorted_var_indices[::2]
+
     if depths is None:
         depths = list(sorted_depths)
 
     n_subplots = len(sorted_depths)
-    ncols = 6
+    ncols = 3
     nrows = int(np.ceil(n_subplots / ncols))
 
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
-        figsize=(ncols * 2.9, nrows * 2.7),
+        figsize=(ncols * 3, nrows * 2.6),
         sharex=True,
         constrained_layout=True,
     )
+    fig.set_constrained_layout_pads(hspace=0.1)
     axes = axes.flatten()
     x = np.arange(1, n_steps + 1)
 
@@ -602,6 +648,7 @@ def plot_metric_by_depth(
                     linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
+                    color=color_map[model],
                 )
                 ax.fill_between(
                     x, ci_lower, ci_upper, color=line.get_color(), alpha=0.3
@@ -613,6 +660,7 @@ def plot_metric_by_depth(
                     linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
+                    color=color_map[model],
                 )
 
         ax.set_xticks(np.arange(1, n_steps + 1), minor=True)
@@ -621,7 +669,11 @@ def plot_metric_by_depth(
         ax.set_xticklabels(major_ticks)
 
         letter = chr(97 + i)
-        ax.set_title(f"{letter}) {variable}{sorted_depths[i]}", fontsize=fs)
+        var_name = constants.PLOT_NAMES_MAP[variable]
+        ax.set_title(
+            f"{letter}) {var_name}, {sorted_depths[i]}m",
+            fontsize=fs,
+        )
 
         if row_index == nrows - 1:
             ax.set_xlabel("Lead time (days)", fontsize=fs)
@@ -657,6 +709,7 @@ def plot_metric_single(
     fs=12,
     output_dir="zos_metric_plots",
     fill_between=False,
+    color_map=None,
 ):
     """
     Plot the chosen metric vs. lead time.
@@ -683,6 +736,7 @@ def plot_metric_single(
                 linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
+                color=color_map[model],
             )
             plt.fill_between(
                 x, ci_lower, ci_upper, color=line.get_color(), alpha=0.3
@@ -694,6 +748,7 @@ def plot_metric_single(
                 linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
+                color=color_map[model],
             )
     plt.xlabel("Lead time (days)", fontsize=fs)
     if metric == "rmse":
@@ -724,13 +779,13 @@ def plot_metric_single(
 
 def plot_avg_group_metric(
     agg_group_metrics_dict,
-    zos_metrics_dict,
     metric="rmse",
     n_steps=15,
     fs=12,
     output_dir="avg_group_metric",
     fill_between=True,
     model_labels=None,
+    color_map=None,
 ):
     """
     Plot aggregated average group metrics vs. lead time.
@@ -758,12 +813,15 @@ def plot_avg_group_metric(
                 linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model) if model_labels else model,
+                color=color_map[model],
             )
             if fill_between:
                 ax.fill_between(
                     steps, ci_lower, ci_upper, color=line.get_color(), alpha=0.3
                 )
-        ax.set_title(group, fontsize=fs)
+        ax.set_title(
+            f"{chr(97+i)}) {constants.PLOT_NAMES_MAP[group]}", fontsize=fs
+        )
 
         ax.set_xticks(x, minor=True)
         major_ticks = range(1, 16, 2)
@@ -783,7 +841,7 @@ def plot_avg_group_metric(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.15),
+        bbox_to_anchor=(0.5, -0.05),
         ncol=len(agg_group_metrics_dict),
         fontsize=fs,
         frameon=False,
@@ -804,6 +862,7 @@ def plot_norm_rmse_diff_by_depth(
     n_steps=15,
     fs=12,
     fill_between=False,
+    color_map=None,
 ):
     """
     Plot normalized RMSE diff computed as
@@ -826,19 +885,24 @@ def plot_norm_rmse_diff_by_depth(
     sorted_pairs = sorted(zip(depths_list, var_indices), key=lambda x: x[0])
     sorted_depths, sorted_var_indices = zip(*sorted_pairs)
 
+    # Use only every other depth
+    sorted_depths = sorted_depths[::2]
+    sorted_var_indices = sorted_var_indices[::2]
+
     n_subplots = len(sorted_depths)
-    ncols = 6
+    ncols = 3
     nrows = int(np.ceil(n_subplots / ncols))
 
     # Create the figure grid
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
-        figsize=(ncols * 2.9, nrows * 2.7),
+        figsize=(ncols * 3, nrows * 2.7),
         sharex=True,
         sharey=True,
         constrained_layout=True,
     )
+    fig.set_constrained_layout_pads(hspace=0.1)
     axes = axes.flatten()
     x = np.arange(1, n_steps + 1)
 
@@ -886,6 +950,7 @@ def plot_norm_rmse_diff_by_depth(
                     linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
+                    color=color_map[model],
                 )
                 ax.fill_between(
                     x,
@@ -901,16 +966,17 @@ def plot_norm_rmse_diff_by_depth(
                     linewidth=2,
                     linestyle="-",
                     label=model_labels.get(model, model),
+                    color=color_map[model],
                 )
 
         # Plot the baseline horizontal line
         ax.plot(
             x,
             np.zeros_like(x),
-            color="black",
-            linestyle="--",
-            linewidth=1,
-            label=baseline_label,
+            linestyle="-",
+            linewidth=2,
+            label=model_labels[baseline_label],
+            color=color_map[baseline_label],
         )
 
         ax.set_xticks(np.arange(1, n_steps + 1), minor=True)
@@ -919,7 +985,11 @@ def plot_norm_rmse_diff_by_depth(
         ax.set_xticklabels(major_ticks)
 
         letter = chr(97 + i)
-        ax.set_title(f"{letter}) {variable}{sorted_depths[i]}", fontsize=fs)
+        var_name = constants.PLOT_NAMES_MAP[variable]
+        ax.set_title(
+            f"{letter}) {var_name}, {sorted_depths[i]}m",
+            fontsize=fs,
+        )
 
         if (i // ncols) == nrows - 1:
             ax.set_xlabel("Lead time (days)", fontsize=fs)
@@ -953,6 +1023,7 @@ def plot_norm_rmse_diff_single(
     n_steps=15,
     fs=12,
     fill_between=False,
+    color_map=None,
 ):
     """
     Plot normalized RMSE diff computed as
@@ -999,6 +1070,7 @@ def plot_norm_rmse_diff_single(
                 linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
+                color=color_map[model],
             )
             plt.fill_between(
                 x,
@@ -1014,15 +1086,16 @@ def plot_norm_rmse_diff_single(
                 linewidth=2,
                 linestyle="-",
                 label=model_labels.get(model, model),
+                color=color_map[model],
             )
     # Plot the baseline horizontal line
     plt.plot(
         x,
         np.zeros_like(x),
-        color="black",
-        linestyle="--",
-        linewidth=1,
-        label=baseline_label,
+        color=color_map[baseline_label],
+        linestyle="-",
+        linewidth=2,
+        label=model_labels[baseline_label],
     )
     plt.xlabel("Lead time (days)", fontsize=fs)
     plt.ylabel("Norm. RMSE diff. (%)", fontsize=fs)
@@ -1084,13 +1157,13 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
     norm_rmse_diff_by_variable = {
         "uo": np.zeros((len(depths), n_steps)),
         "vo": np.zeros((len(depths), n_steps)),
-        "thetao": np.zeros((len(depths), n_steps)),
         "so": np.zeros((len(depths), n_steps)),
+        "thetao": np.zeros((len(depths), n_steps)),
     }
 
     # Populate the matrices for each variable
     for idx, param in enumerate(param_names):
-        match = re.match(r"(uo|vo|thetao|so)_(\d+)", param)
+        match = re.match(r"(uo|vo|so|thetao)_(\d+)", param)
         if match:
             variable = match.group(1)
             depth = int(match.group(2))
@@ -1110,9 +1183,9 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
 
     # Create a 2x2 figure with shared x and y axes
     fig, axes = plt.subplots(
-        2,
-        2,
-        figsize=(8, 7.5),
+        1,
+        4,
+        figsize=(12, 4.3),
         sharex=True,
         sharey=True,
         constrained_layout=True,
@@ -1131,13 +1204,24 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
             vmax=global_limit,
         )
         ims.append(im)
-        ax.set_title(f"{chr(97+i)}) {variable}", fontsize=12)
-        if i >= 2:
-            ax.set_xlabel("Lead time (days)", fontsize=12)
-        if i % 2 == 0:
+        ax.set_title(
+            f"{chr(97+i)}) {constants.PLOT_NAMES_MAP[variable]}", fontsize=14
+        )
+        ax.set_xlabel("Lead time (days)", fontsize=12)
+        if i == 0:
             ax.set_ylabel("Depth (m)", fontsize=12)
-        ax.set_xticks(range(n_steps))
-        ax.set_xticklabels(range(1, n_steps + 1))
+        if n_steps > 10:
+            major_ticks = list(range(0, n_steps, 2))
+            minor_ticks = list(range(n_steps))
+            ax.set_xticks(minor_ticks, minor=True)
+            ax.set_xticks(major_ticks)
+            ax.set_xticklabels([str(i + 1) for i in major_ticks])
+            ax.tick_params(axis="both", which="major", labelsize=11)
+            ax.tick_params(axis="x", which="minor", length=3)
+        else:
+            ax.set_xticks(range(n_steps))
+            ax.set_xticklabels(range(1, n_steps + 1))
+            ax.tick_params(axis="both", labelsize=11)
         ax.set_yticks(np.arange(len(depths)))
         ax.set_yticklabels(depths)
 
@@ -1145,27 +1229,29 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
         ims[0],
         ax=axes.ravel().tolist(),
         orientation="horizontal",
-        shrink=0.5,
+        shrink=0.3,
         aspect=30,
     )
-    cbar.set_label("Norm. RMSE diff. (%)", fontsize=10)
-    cbar.ax.tick_params(labelsize=10)
+    cbar.set_label("Norm. RMSE diff. (%)", fontsize=11)
+    cbar.ax.tick_params(labelsize=11)
 
     # Save the figure
     save_dir = os.path.join("figures", "metrics", "scorecards")
     os.makedirs(save_dir, exist_ok=True)
     full_save_path = os.path.join(save_dir, base_save_name)
-    fig.savefig(f"{full_save_path}.png", bbox_inches="tight")
+    for ext in ["png", "pdf"]:
+        fig.savefig(f"{full_save_path}.{ext}", bbox_inches="tight")
     plt.close(fig)
 
 
-def plot_rmse_vs_depth_variable(
+def plot_rmse_vs_depth(
     rmse_std_all,
     variable,
     model_labels,
     n_steps=15,
     fs=12,
     output_dir="rmse_depths",
+    color_map=None,
 ):
     """
     Plots RMSE (x-axis) vs depth (y-axis) for a given lead time.
@@ -1187,14 +1273,15 @@ def plot_rmse_vs_depth_variable(
     sorted_pairs = sorted(zip(depths, var_indices), key=lambda x: x[0])
     depths, var_indices = zip(*sorted_pairs)
 
-    ncols = 5
-    nrows = 3
+    ncols = 3
+    nrows = 5
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
-        figsize=(ncols * 3, nrows * 3.2),
+        figsize=(ncols * 3, nrows * 2.5),
         sharex=True,
         sharey=True,
+        constrained_layout=True,
     )
     axes = axes.flatten()
 
@@ -1207,9 +1294,13 @@ def plot_rmse_vs_depth_variable(
                 rmse_depth,
                 depths,
                 label=model_labels[model],
+                color=color_map[model],
                 linewidth=2,
             )
-        ax.set_title(f"{chr(97+t)}) {variable} (t={t+1}d)", fontsize=fs)
+        ax.set_title(
+            f"{chr(97+t)}) {constants.PLOT_NAMES_MAP[variable]}, day {t+1}",
+            fontsize=fs,
+        )
         if t // ncols == nrows - 1:
             ax.set_xlabel(f"RMSE ({unit})", fontsize=fs)
         if t % ncols == 0:
@@ -1220,12 +1311,12 @@ def plot_rmse_vs_depth_variable(
     fig.legend(
         handles,
         labels,
-        loc="lower center",
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.02),
         ncol=len(rmse_std_all),
         fontsize=fs,
         frameon=False,
     )
-    fig.tight_layout(rect=[0, 0.08, 1, 0.95])
     save_path = os.path.join(output_dir, f"{variable}_rmse_depth.png")
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
@@ -1276,14 +1367,12 @@ def plot_spatial_rmse_diff(
         unit = constants.PARAM_UNITS[constants.PARAM_NAMES_SHORT.index(group)]
         rmse_model = model_data[group]["rmse_avg"]  # (n_grid,)
         rmse_baseline = baseline_data[group]["rmse_avg"]  # (n_grid,)
-        norm_rmse_diff = rmse_model - rmse_baseline
-        vlim = np.percentile(
-            np.abs(norm_rmse_diff[~np.isnan(norm_rmse_diff)]), 99
-        )
+        rmse_diff = rmse_model - rmse_baseline
+        vlim = np.percentile(np.abs(rmse_diff[~np.isnan(rmse_diff)]), 99)
 
         # Reconstruct full grid (n_lat, n_lon) using the surface mask:
         full_grid_norm_diff = np.full(surface_mask.shape, np.nan)
-        full_grid_norm_diff[surface_mask == 1] = norm_rmse_diff
+        full_grid_norm_diff[surface_mask == 1] = rmse_diff
 
         ax = axes[i]
 
@@ -1535,6 +1624,37 @@ def main():
     )
     args = parser.parse_args()
 
+    color_map = {
+        "seacast": "tab:blue",
+        "med_phy": "tab:orange",
+        "persistence": "tab:gray",
+        "seacast_base": "#aec7e8",
+        "seacast_10y": "tab:green",
+        "seacast_10y_base": "#98df8a",
+        "t2m_permuted": "tab:red",
+        "tau_permuted": "tab:purple",
+        "msl_permuted": "tab:olive",
+        "all_permuted": "tab:brown",
+        "seacast_analysis": "tab:cyan",
+        "seacast_2": "#aec7e8",
+        "med_phy_2": "#ffbb78",
+    }
+    model_labels = {
+        "seacast": "SeaCast",
+        "med_phy": "MedFS",
+        "persistence": "Persistence",
+        "seacast_base": "SeaCast (w/o finetuning)",
+        "seacast_10y": "SeaCast (10y)",
+        "seacast_10y_base": "SeaCast (10y, w/o finetuning)",
+        "t2m_permuted": "2m-temp. perm.",
+        "tau_permuted": "Wind stress perm.",
+        "msl_permuted": "MSL perm.",
+        "all_permuted": "All perm.",
+        "seacast_analysis": "SeaCast (analysis init.)",
+        "seacast_2": "SeaCast (Tuesdays)",
+        "med_phy_2": "MedFS (Tuesdays)",
+    }
+
     if args.plot_group_bias:
         bathy_path = os.path.join(
             "data", args.dataset, "static", "bathy_mask.nc"
@@ -1596,108 +1716,68 @@ def main():
     if args.plot_rmse:
         models = [
             "seacast",
-            "seacast_base",
-            "seacast_10y",
-            "seacast_10y_base",
+            "seacast_2",
             "med_phy",
+            "med_phy_2",
+            "persistence",
         ]
-        label_list = [
-            "SeaCast",
-            "SeaCast (w/o finetuning)",
-            "SeaCast (10y)",
-            "SeaCast (10y, w/o finetuning)",
-            "MedFS",
-        ]
-        model_labels = dict(zip(models, label_list))
         output_dir = os.path.join("figures", "metrics", "avg_group_metric")
         agg_group_rmse_all = {}
-        zos_rmse_all = {}
         for model in models:
             json_path_avg_rmse = os.path.join(
                 "data", args.dataset, "metrics", model, "avg_group_rmse.json"
             )
             with open(json_path_avg_rmse, "r", encoding="utf8") as jf:
                 agg_group_rmse_all[model] = json.load(jf)
-            json_path_rmse = os.path.join(
-                "data", args.dataset, "metrics", model, "rmse.json"
-            )
-            metric_matrix, ci_data = load_metric_std_steps(
-                json_path_rmse, n_steps=15, metric="rmse"
-            )
-            zos_rmse_all[model] = (metric_matrix, ci_data)
         # Plot aggregated group RMSE for all models in one figure.
         plot_avg_group_metric(
             agg_group_rmse_all,
-            zos_rmse_all,
             metric="rmse",
             n_steps=15,
-            fs=12,
+            fs=11,
             output_dir=output_dir,
             fill_between=True,
             model_labels=model_labels,
+            color_map=color_map,
         )
 
     if args.plot_acc:
         models = [
             "seacast",
-            "seacast_base",
-            "seacast_10y",
-            "seacast_10y_base",
+            "seacast_2",
             "med_phy",
+            "med_phy_2",
+            "persistence",
         ]
-        label_list = [
-            "SeaCast",
-            "SeaCast (w/o finetuning)",
-            "SeaCast (10y)",
-            "SeaCast (10y, w/o finetuning)",
-            "MedFS",
-        ]
-        model_labels = dict(zip(models, label_list))
         output_dir = os.path.join("figures", "metrics", "avg_group_metric")
         agg_group_acc_all = {}
-        zos_acc_all = {}
         for model in models:
             json_path_avg_acc = os.path.join(
                 "data", args.dataset, "metrics", model, "avg_group_acc.json"
             )
             with open(json_path_avg_acc, "r", encoding="utf8") as jf:
                 agg_group_acc_all[model] = json.load(jf)
-            json_path_acc = os.path.join(
-                "data", args.dataset, "metrics", model, "acc.json"
-            )
-            metric_matrix, ci_data = load_metric_std_steps(
-                json_path_acc, n_steps=15, metric="acc"
-            )
-            zos_acc_all[model] = (metric_matrix, ci_data)
         # Plot aggregated group ACC for all models in one figure.
         plot_avg_group_metric(
             agg_group_acc_all,
-            zos_acc_all,
             metric="acc",
             n_steps=15,
-            fs=12,
+            fs=11,
             output_dir=output_dir,
             fill_between=False,
             model_labels=model_labels,
+            color_map=color_map,
         )
 
     if args.plot_rmse:
         output_dir = os.path.join("figures", "metrics", "rmse_models")
         models = [
             "seacast",
-            "seacast_base",
-            "seacast_10y",
-            "seacast_10y_base",
+            "seacast_2",
             "med_phy",
+            "med_phy_2",
+            "persistence",
         ]
-        label_list = [
-            "SeaCast",
-            "SeaCast (w/o finetuning)",
-            "SeaCast (10y)",
-            "SeaCast (10y, w/o finetuning)",
-            "MedFS",
-        ]
-        model_labels = dict(zip(models, label_list))
         metric_std_all = {}
         for model in models:
             json_path = os.path.join(
@@ -1713,6 +1793,7 @@ def main():
                 output_dir,
                 metric_std_all,
                 model_labels,
+                color_map=color_map,
                 metric="rmse",
                 n_steps=15,
                 fs=12,
@@ -1722,6 +1803,7 @@ def main():
             "zos",
             metric_std_all,
             model_labels,
+            color_map=color_map,
             metric="rmse",
             n_steps=15,
             fs=12,
@@ -1733,19 +1815,11 @@ def main():
         output_dir = os.path.join("figures", "metrics", "acc_models")
         models = [
             "seacast",
-            "seacast_base",
-            "seacast_10y",
-            "seacast_10y_base",
+            "seacast_2",
             "med_phy",
+            "med_phy_2",
+            "persistence",
         ]
-        label_list = [
-            "SeaCast",
-            "SeaCast (w/o finetuning)",
-            "SeaCast (10y)",
-            "SeaCast (10y, w/o finetuning)",
-            "MedFS",
-        ]
-        model_labels = dict(zip(models, label_list))
         metric_std_all = {}
         for model in models:
             json_path = os.path.join(
@@ -1761,6 +1835,7 @@ def main():
                 output_dir,
                 metric_std_all,
                 model_labels,
+                color_map=color_map,
                 metric="acc",
                 n_steps=15,
                 fs=12,
@@ -1769,6 +1844,7 @@ def main():
             "zos",
             metric_std_all,
             model_labels,
+            color_map=color_map,
             metric="acc",
             n_steps=15,
             fs=12,
@@ -1784,14 +1860,6 @@ def main():
             "msl_permuted",
             "all_permuted",
         ]
-        label_list = [
-            "SeaCast",
-            "Permuted t2m",
-            "Permuted tau",
-            "Permuted msl",
-            "Permuted all",
-        ]
-        model_labels = dict(zip(models, label_list))
         metric_std_all = {}
         for model in models:
             json_path = os.path.join(
@@ -1807,6 +1875,7 @@ def main():
                 output_dir,
                 metric_std_all,
                 model_labels,
+                color_map=color_map,
                 metric="rmse",
                 n_steps=15,
                 fs=12,
@@ -1815,6 +1884,7 @@ def main():
             "zos",
             metric_std_all,
             model_labels,
+            color_map=color_map,
             metric="rmse",
             n_steps=15,
             fs=12,
@@ -1831,14 +1901,6 @@ def main():
             "msl_permuted",
             "all_permuted",
         ]
-        label_list = [
-            "SeaCast",
-            "Permuted t2m",
-            "Permuted tau",
-            "Permuted msl",
-            "Permuted all",
-        ]
-        model_labels = dict(zip(models, label_list))
         metric_std_all = {}
         for model in models:
             json_path = os.path.join(
@@ -1854,6 +1916,7 @@ def main():
                 output_dir,
                 metric_std_all,
                 model_labels,
+                color_map=color_map,
                 metric="acc",
                 n_steps=15,
                 fs=12,
@@ -1862,6 +1925,7 @@ def main():
             "zos",
             metric_std_all,
             model_labels,
+            color_map=color_map,
             metric="acc",
             n_steps=15,
             fs=12,
@@ -1883,13 +1947,6 @@ def main():
             "msl_permuted",
             "all_permuted",
         ]
-        label_list = [
-            "Permuted t2m",
-            "Permuted tau",
-            "Permuted msl",
-            "Permuted all",
-        ]
-        model_labels = dict(zip(models, label_list))
         model_jsons = {}
         for model in models:
             json_path = os.path.join(
@@ -1904,6 +1961,7 @@ def main():
                 baseline_label,
                 model_labels,
                 output_dir,
+                color_map=color_map,
                 n_steps=15,
                 fs=12,
                 fill_between=False,
@@ -1915,6 +1973,7 @@ def main():
             baseline_label,
             model_labels,
             output_dir,
+            color_map=color_map,
             n_steps=15,
             fs=12,
             fill_between=False,
@@ -1932,13 +1991,6 @@ def main():
             "seacast_10y",
             "seacast_10y_base",
         ]
-        label_list = [
-            "SeaCast",
-            "SeaCast (w/o finetuning)",
-            "SeaCast (10y)",
-            "SeaCast (10y, w/o finetuning)",
-        ]
-        model_labels = dict(zip(models, label_list))
         model_jsons = {}
         for model in models:
             json_path = os.path.join(
@@ -1953,6 +2005,7 @@ def main():
                 baseline_label,
                 model_labels,
                 output_dir,
+                color_map=color_map,
                 n_steps=10,
                 fs=12,
                 fill_between=False,
@@ -1964,6 +2017,7 @@ def main():
             baseline_label,
             model_labels,
             output_dir,
+            color_map=color_map,
             n_steps=10,
             fs=12,
             fill_between=False,
@@ -1984,14 +2038,6 @@ def main():
                 "seacast_10y_base",
                 "med_phy",
             ]
-            label_list = [
-                "SeaCast",
-                "SeaCast (w/o finetuning)",
-                "SeaCast (10y)",
-                "SeaCast (10y, w/o finetuning)",
-                "MedFS",
-            ]
-            model_labels = dict(zip(models, label_list))
             model_jsons = {}
             for model in models:
                 json_path = os.path.join(
@@ -2006,6 +2052,7 @@ def main():
                     baseline_label,
                     model_labels,
                     output_dir,
+                    color_map=color_map,
                     n_steps=15,
                     fs=12,
                     fill_between=False,
@@ -2017,6 +2064,7 @@ def main():
                 baseline_label,
                 model_labels,
                 output_dir,
+                color_map=color_map,
                 n_steps=15,
                 fs=12,
                 fill_between=False,
@@ -2057,14 +2105,7 @@ def main():
     # RMSE at depth
     if args.plot_rmse_depth:
         output_dir = os.path.join("figures", "metrics", "rmse_depths")
-        models = ["seacast", "med_phy", "seacast_analysis", "persistence"]
-        label_list = [
-            "SeaCast",
-            "MedFS",
-            "SeaCast (analysis init)",
-            "Persistence",
-        ]
-        model_labels = dict(zip(models, label_list))
+        models = ["seacast", "seacast_analysis", "med_phy", "persistence"]
         rmse_std_all = {}
         for model in models:
             json_path = os.path.join(
@@ -2075,10 +2116,40 @@ def main():
             )
             rmse_std_all[model] = (rmse_matrix, std_matrix)
         for variable in ["uo", "vo", "so", "thetao"]:
-            plot_rmse_vs_depth_variable(
+            plot_rmse_vs_depth(
                 rmse_std_all,
                 variable,
                 model_labels,
+                color_map=color_map,
+                n_steps=15,
+                fs=12,
+                output_dir=output_dir,
+            )
+
+    if args.plot_rmse_depth:
+        output_dir = os.path.join("figures", "metrics", "rmse_depths_models")
+        models = [
+            "seacast",
+            "seacast_base",
+            "seacast_10y",
+            "seacast_10y_base",
+            "med_phy",
+        ]
+        rmse_std_all = {}
+        for model in models:
+            json_path = os.path.join(
+                "data", args.dataset, "metrics", model, "rmse.json"
+            )
+            rmse_matrix, std_matrix = load_metric_std_steps(
+                json_path, n_steps=15, metric="rmse"
+            )
+            rmse_std_all[model] = (rmse_matrix, std_matrix)
+        for variable in ["uo", "vo", "so", "thetao"]:
+            plot_rmse_vs_depth(
+                rmse_std_all,
+                variable,
+                model_labels,
+                color_map=color_map,
                 n_steps=15,
                 fs=12,
                 output_dir=output_dir,

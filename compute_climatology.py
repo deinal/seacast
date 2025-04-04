@@ -12,6 +12,7 @@ from tqdm import tqdm
 def compute_climatology(dataset):
     """
     Compute climatology for each day-of-year.
+    Only files with date >= 1993 are included in the calculation.
     """
     reanalysis_folder = os.path.join("data", dataset, "raw", "reanalysis")
     analysis_folder = os.path.join("data", dataset, "raw", "analysis")
@@ -19,22 +20,24 @@ def compute_climatology(dataset):
     output_folder = os.path.join("data", dataset, "climatology")
     os.makedirs(output_folder, exist_ok=True)
 
-    # Gather all files from both folders
+    # Gather all files from both folders.
     all_files = sorted(
         glob.glob(os.path.join(reanalysis_folder, "*.npy"))
         + glob.glob(os.path.join(analysis_folder, "*.npy"))
     )
 
-    # Group files by doy
+    # Group files by day-of-year (doy) only if the file date is >= 1993.
     files_by_doy = {}
     for file_path in all_files:
         file_name = os.path.basename(file_path)
         date_str = os.path.splitext(file_name)[0]
         dt = datetime.strptime(date_str, "%Y%m%d")
+        if dt.year < 1993:
+            continue
         doy = dt.timetuple().tm_yday  # doy (1 to 365/366)
         files_by_doy.setdefault(doy, []).append(file_path)
 
-    # Process one doy at a time
+    # Process one doy at a time.
     for doy in tqdm(sorted(files_by_doy.keys()), desc="Processing day-of-year"):
         file_list = files_by_doy[doy]
         sum_data = None
@@ -45,10 +48,10 @@ def compute_climatology(dataset):
                 sum_data = np.zeros_like(data, dtype=np.float32)
             sum_data += data
             count += 1
-        # Compute doy mean
+        # Compute the mean for the day-of-year.
         daily_mean = sum_data / count
 
-        # Save each day's climatology in the form doyXXX
+        # Save the climatology for each day-of-year in the form doyXXX.npy.
         output_filename = f"doy{doy:03d}.npy"
         output_path = os.path.join(output_folder, output_filename)
         np.save(output_path, daily_mean)

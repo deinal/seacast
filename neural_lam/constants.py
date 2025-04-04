@@ -45,6 +45,14 @@ PARAM_NAMES_SHORT = [
     "zos",
 ]
 
+PLOT_NAMES = [
+    "Zonal current",
+    "Meridional current",
+    "Salinity",
+    "Temperature",
+    "Sea surface height",
+]
+
 PARAM_UNITS = [
     "m/s",
     "m/s",
@@ -138,3 +146,5 @@ for name, short_name, unit, colormap, diverging, levels_applies in zip(
         EXP_PARAM_UNITS.append(unit)
         EXP_PARAM_COLORMAPS.append(colormap)
         EXP_DIVERGING.append(diverging)
+
+PLOT_NAMES_MAP = dict(zip(PARAM_NAMES_SHORT, PLOT_NAMES))
