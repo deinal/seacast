@@ -17,6 +17,7 @@ cdsapi>=0.7.0
 ecmwf-opendata>=0.3.8
 cmocean>=4.0.3
 dask[complete]>=2024.12.1
+numba>=0.60.0
 # for dev
 codespell>=2.0.0
 black>=21.9b0

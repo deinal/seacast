@@ -16,11 +16,10 @@ from tqdm import tqdm
 from neural_lam import constants
 
 
-def prepare_sst(input_dir, output_dir):
+def prepare_sst(output_dir):
     """
     Prepare SST data.
     """
-    sst_dir = os.path.join(input_dir, "sst")
     ds = cm.open_dataset(
         dataset_id="SST_MED_SST_L3S_NRT_OBSERVATIONS_010_012_a",
         variables=["sea_surface_temperature"],
@@ -28,12 +27,66 @@ def prepare_sst(input_dir, output_dir):
         start_datetime="2024-07-01T00:00:00",
         end_datetime="2025-01-15T23:59:59",
     )
+    ds["sea_surface_temperature"] = (
+        ds.sea_surface_temperature.where(
+            ~((ds.longitude < 2) & (ds.latitude > 42))
+        )
+        - 273.15
+    )
+    new_times = ds["time"] - pd.Timedelta(days=1)
+    ds = ds.assign_coords(time=new_times)
+    output_file = os.path.join(output_dir, "sst.nc")
+    ds.to_netcdf(output_file)
+
+
+def prepare_mhw(output_dir):
+    """
+    Prepare MHW thresholds following Hobday et al. (2016).
+    """
+    ds = cm.open_dataset(
+        dataset_id="SST_MED_SST_L3S_NRT_OBSERVATIONS_010_012_a",
+        variables=["sea_surface_temperature"],
+        minimum_longitude=-6,
+        start_datetime="2008-01-01T00:00:00",
+        end_datetime="2023-12-31T23:59:59",
+    )
     ds["sea_surface_temperature"] = ds.sea_surface_temperature.where(
         ~((ds.longitude < 2) & (ds.latitude > 42))
     )
-    os.makedirs(sst_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "sst.nc")
-    ds.to_netcdf(output_file)
+
+    # Match time to forecast
+    new_times = ds["time"] - pd.Timedelta(days=1)
+    ds = ds.assign_coords(time=new_times)
+
+    # Convert to Celsius
+    sst_obs = ds["sea_surface_temperature"] - 273.15
+
+    # Smooth the SST time series using an 11-day rolling average
+    sst_smoothed = sst_obs.rolling(time=11, center=True, min_periods=1).mean()
+
+    # Compute day-of-year for the smoothed data
+    time_obs = pd.to_datetime(ds["time"].values)
+    doy = xr.DataArray(time_obs.dayofyear, coords=[time_obs], dims="time")
+
+    # Compute the 90th percentile climatology for each doy
+    clim = sst_smoothed.groupby(doy).reduce(np.nanpercentile, q=90)
+    # Rename the resulting group dimension to dayofyear
+    clim = clim.rename({"group": "dayofyear"})
+
+    # Create a new dataset to store the thresholds
+    ds_threshold = xr.Dataset(
+        {"sst_threshold": (("dayofyear",) + sst_obs.dims[1:], clim.data)},
+        coords={
+            "dayofyear": clim.dayofyear,
+            "latitude": sst_obs.latitude,
+            "longitude": sst_obs.longitude,
+        },
+    )
+
+    # Save the computed thresholds to NetCDF
+    output_file = os.path.join(output_dir, "mhw_thresholds.nc")
+    ds_threshold.to_netcdf(output_file)
+    print("MHW thresholds saved to:", output_file)
 
 
 def pad_dataset_list(ds_list, dim, constant_values=np.nan):
@@ -308,7 +361,7 @@ def main():
         "-d",
         "--data",
         nargs="+",
-        choices=["sst", "sla", "in_situ"],
+        choices=["sst", "mhw", "sla", "in_situ"],
         required=True,
     )
     parser.add_argument(
@@ -322,7 +375,9 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     if "sst" in args.data:
-        prepare_sst(args.input_dir, args.output_dir)
+        prepare_sst(args.output_dir)
+    if "mhw" in args.data:
+        prepare_mhw(args.output_dir)
     if "sla" in args.data:
         prepare_sla(args.input_dir, args.output_dir)
     if "in_situ" in args.data:

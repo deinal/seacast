@@ -117,7 +117,7 @@ def read_npy_to_xarray(file_path, sea_mask, init=False):
 
 
 def plot_forecast(
-    ds, analysis_ds, param, lead_indices, depth_index=2, model="seacast", fs=14
+    ds, analysis_ds, param, lead_indices, depth_index=2, model="seacast", fs=18
 ):
     """
     Plot a stack of forecast fields and bias to analysis.
@@ -125,9 +125,7 @@ def plot_forecast(
     unit = ds[param].attrs.get("unit", "")
     cmap = ds[param].attrs.get("colormap", "viridis")
     diverging = ds[param].attrs.get("diverging", False)
-    depth = round(constants.DEPTHS[depth_index])
 
-    # Define the geographic extent
     lons = ds["longitude"].values
     lats = ds["latitude"].values
     extent = [lons.min(), lons.max(), lats.min(), lats.max()]
@@ -148,23 +146,20 @@ def plot_forecast(
 
     fc_all = np.stack(fc_vals)
     diff_all = np.stack(diff_vals)
-
     if diverging:
         fc_abs_max = np.nanmax(np.abs(fc_all))
         fc_vmin, fc_vmax = -fc_abs_max, fc_abs_max
     else:
         fc_vmin, fc_vmax = np.nanmin(fc_all), np.nanmax(fc_all)
 
-    # Bias color centered around zero
     diff_abs_max = np.nanmax(np.abs(diff_all))
     diff_vmin, diff_vmax = -diff_abs_max, diff_abs_max
 
-    # Create figure
     n_rows = len(lead_indices)
     fig, axes = plt.subplots(
         nrows=n_rows,
         ncols=2,
-        figsize=(21, 4 * n_rows),
+        figsize=(18, 3.1 * n_rows),
         constrained_layout=True,
         sharex=True,
         sharey=True,
@@ -174,7 +169,7 @@ def plot_forecast(
         axes = axes[np.newaxis, :]
 
     for row, idx in enumerate(lead_indices):
-        # Forecast
+        # Forecast panel left
         fc_data = ds[param].isel(time=idx)
         if "depth" in fc_data.dims:
             fc_data = fc_data.isel(depth=depth_index)
@@ -187,24 +182,25 @@ def plot_forecast(
             vmin=fc_vmin,
             vmax=fc_vmax,
         )
-        var_name = constants.PLOT_NAMES_MAP[param]
-        ax_fc.set_title(
-            f"Forecasted {var_name} at {depth}m, day {idx+1}",
-            fontsize=fs,
+        ax_fc.set_ylabel(
+            f"{idx+1}d", fontsize=fs, rotation=0, labelpad=7, ha="right"
         )
+        if row == 0:
+            ax_fc.set_title("SeaCast", fontsize=fs)
         ax_fc.coastlines(resolution="10m", linewidth=1)
         ax_fc.add_feature(cfeature.LAND, facecolor="whitesmoke")
         cbar_fc = fig.colorbar(
             im_fc,
             ax=ax_fc,
             orientation="vertical",
-            shrink=0.905,
-            aspect=25,
+            shrink=0.8,
+            aspect=22,
             pad=0.02,
         )
-        cbar_fc.ax.set_ylabel(unit)
+        cbar_fc.ax.set_ylabel(unit, fontsize=fs - 4)
+        cbar_fc.ax.tick_params(labelsize=fs - 4)
 
-        # Bias
+        # Bias panel right
         ana_data = analysis_ds[param].sel(time=ds.time[idx])
         if "depth" in ana_data.dims:
             ana_data = ana_data.isel(depth=depth_index)
@@ -218,65 +214,34 @@ def plot_forecast(
             vmin=diff_vmin,
             vmax=diff_vmax,
         )
-        var_name = constants.PLOT_NAMES_MAP[param]
-        ax_diff.set_title(
-            f"Bias of {var_name} at {depth}m, day {idx+1}",
-            fontsize=fs,
-        )
+        if row == 0:
+            ax_diff.set_title("Bias", fontsize=fs)
         ax_diff.coastlines(resolution="10m", linewidth=1)
         ax_diff.add_feature(cfeature.LAND, facecolor="whitesmoke")
         cbar_diff = fig.colorbar(
             im_diff,
             ax=ax_diff,
             orientation="vertical",
-            shrink=0.905,
-            aspect=25,
+            shrink=0.8,
+            aspect=22,
             pad=0.02,
         )
         cbar_diff.ax.set_ylabel(unit)
+        cbar_diff.ax.set_ylabel(unit, fontsize=fs - 4)
+        cbar_diff.ax.tick_params(labelsize=fs - 4)
 
-    # Compute tick positions for latitude and longitude
-    lat_min, lat_max = extent[2], extent[3]
-    lat_tick_start = np.ceil(lat_min / 3) * 3
-    lat_tick_end = np.floor(lat_max / 3) * 3
-    lat_ticks = np.arange(lat_tick_start, lat_tick_end + 1, 3)
-
-    lon_min, lon_max = extent[0], extent[1]
-    lon_tick_start = np.ceil(lon_min / 5) * 5
-    lon_tick_end = np.floor(lon_max / 5) * 5
-    lon_ticks = np.arange(lon_tick_start, lon_tick_end + 1, 5)
-
-    # Apply fixed tick positions to every subplot
     for ax in axes.ravel():
-        ax.set_xticks(lon_ticks, crs=ccrs.PlateCarree())
-        ax.set_yticks(lat_ticks, crs=ccrs.PlateCarree())
+        ax.set_xticks([])
+        ax.set_yticks([])
 
-    # Show tick labels only on bottom row (x-axis) and first column (y-axis)
-    nrows, ncols = axes.shape
-    for i in range(nrows):
-        for j in range(ncols):
-            if i == nrows - 1:
-                axes[i, j].set_xlabel("Longitude (°)", fontsize=fs)
-                axes[i, j].tick_params(labelbottom=True)
-                axes[i, j].set_xticklabels(
-                    [str(int(x)) for x in lon_ticks], fontsize=fs
-                )
-            else:
-                axes[i, j].tick_params(labelbottom=False)
-            if j == 0:
-                axes[i, j].set_ylabel("Latitude (°)", fontsize=fs)
-                axes[i, j].tick_params(labelleft=True)
-                axes[i, j].set_yticklabels(
-                    [str(int(y)) for y in lat_ticks], fontsize=fs
-                )
-            else:
-                axes[i, j].tick_params(labelleft=False)
-
-    # Save the figure
     save_dir = os.path.join("figures", "metrics", "forecast")
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"{model}_{param}.png")
-    fig.savefig(save_path)
+    fig.savefig(save_path, bbox_inches="tight")
+    fig.savefig(
+        os.path.join("figures", "results", f"{model}_{param}.pdf"),
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
 
@@ -585,6 +550,7 @@ def plot_metric_by_depth(
     fs=12,
     fill_between=False,
     color_map=None,
+    legend_ncol=None,
 ):
     """
     Create one figure for a given variable with a grid of subplots.
@@ -667,6 +633,7 @@ def plot_metric_by_depth(
         major_ticks = range(1, 16, 2)
         ax.set_xticks(major_ticks, minor=False)
         ax.set_xticklabels(major_ticks)
+        ax.tick_params(axis="both", which="major", labelsize=fs)
 
         letter = chr(97 + i)
         var_name = constants.PLOT_NAMES_MAP[variable]
@@ -685,18 +652,24 @@ def plot_metric_by_depth(
 
     # Create a common legend
     handles, labels = axes[0].get_legend_handles_labels()
+    if legend_ncol is None:
+        legend_ncol = len(metric_std_all)
     fig.legend(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.02),
-        ncol=len(metric_std_all),
+        bbox_to_anchor=(0.52, -0.02),
+        ncol=legend_ncol,
         fontsize=fs,
         frameon=False,
     )
 
     save_path = os.path.join(output_dir, f"{variable}_{metric}.png")
     fig.savefig(save_path, bbox_inches="tight")
+    pdf_name = f"{variable}_{metric}_{output_dir.split('_')[-1]}.pdf"
+    fig.savefig(
+        os.path.join("figures", "results", pdf_name), bbox_inches="tight"
+    )
     plt.close(fig)
 
 
@@ -710,6 +683,7 @@ def plot_metric_single(
     output_dir="zos_metric_plots",
     fill_between=False,
     color_map=None,
+    legend_ncol=None,
 ):
     """
     Plot the chosen metric vs. lead time.
@@ -761,14 +735,17 @@ def plot_metric_single(
     major_ticks = range(1, 16, 2)
     ax.set_xticks(major_ticks, minor=False)
     ax.set_xticklabels(major_ticks)
+    ax.tick_params(axis="both", which="major", labelsize=fs)
 
     handles, labels = ax.get_legend_handles_labels()
+    if legend_ncol is None:
+        legend_ncol = len(metric_std_all)
     plt.legend(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.15),
-        ncol=len(metric_std_all),
+        bbox_to_anchor=(0.52, -0.15),
+        ncol=legend_ncol,
         fontsize=fs,
         frameon=False,
     )
@@ -786,14 +763,17 @@ def plot_avg_group_metric(
     fill_between=True,
     model_labels=None,
     color_map=None,
+    legend_ncol=None,
 ):
     """
     Plot aggregated average group metrics vs. lead time.
     """
     os.makedirs(output_dir, exist_ok=True)
     fig, axes = plt.subplots(
-        1, 4, figsize=(4 * 3.2, 3), constrained_layout=True
+        2, 2, figsize=(2 * 3.2, 2 * 2.8), constrained_layout=True
     )
+    fig.set_constrained_layout_pads(hspace=0.1)
+    axes = axes.flatten()
     x = np.arange(1, n_steps + 1)
 
     groups = ["uo", "vo", "so", "thetao"]
@@ -828,6 +808,7 @@ def plot_avg_group_metric(
         ax.set_xticks(major_ticks, minor=False)
         ax.set_xticklabels(major_ticks)
         ax.set_xlabel("Lead time (days)", fontsize=fs)
+        ax.tick_params(axis="both", which="major", labelsize=fs)
 
         if metric == "rmse":
             ax.set_ylabel(f"{metric.upper()} ({unit})", fontsize=fs)
@@ -837,17 +818,21 @@ def plot_avg_group_metric(
 
     # Create a common legend across all subplots.
     handles, labels = ax.get_legend_handles_labels()
+    if legend_ncol is None:
+        legend_ncol = len(agg_group_metrics_dict)
     fig.legend(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.05),
-        ncol=len(agg_group_metrics_dict),
+        bbox_to_anchor=(0.52, -0.05),
+        ncol=legend_ncol,
         fontsize=fs,
         frameon=False,
     )
 
     save_path = os.path.join(output_dir, f"{metric}.png")
+    fig.savefig(save_path, bbox_inches="tight")
+    save_path = os.path.join("figures", "results", f"{metric}_avg.pdf")
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
 
@@ -863,6 +848,7 @@ def plot_norm_rmse_diff_by_depth(
     fs=12,
     fill_between=False,
     color_map=None,
+    legend_ncol=None,
 ):
     """
     Plot normalized RMSE diff computed as
@@ -977,12 +963,14 @@ def plot_norm_rmse_diff_by_depth(
             linewidth=2,
             label=model_labels[baseline_label],
             color=color_map[baseline_label],
+            zorder=0,
         )
 
         ax.set_xticks(np.arange(1, n_steps + 1), minor=True)
         major_ticks = range(1, 16, 2)
         ax.set_xticks(major_ticks, minor=False)
         ax.set_xticklabels(major_ticks)
+        ax.tick_params(axis="both", which="major", labelsize=fs)
 
         letter = chr(97 + i)
         var_name = constants.PLOT_NAMES_MAP[variable]
@@ -997,12 +985,14 @@ def plot_norm_rmse_diff_by_depth(
             ax.set_ylabel("Norm. RMSE diff. (%)", fontsize=fs)
 
     handles, labels = axes[0].get_legend_handles_labels()
+    if legend_ncol is None:
+        legend_ncol = len(model_jsons) + 1
     fig.legend(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.02),
-        ncol=len(model_jsons) + 1,
+        bbox_to_anchor=(0.52, -0.02),
+        ncol=legend_ncol,
         fontsize=fs,
         frameon=False,
     )
@@ -1010,6 +1000,10 @@ def plot_norm_rmse_diff_by_depth(
 
     save_path = os.path.join(output_dir, f"{variable}_norm_rmse_diff.png")
     fig.savefig(save_path, bbox_inches="tight")
+    pdf_name = f"{variable}_norm_rmse_diff_{output_dir.split('_')[-1]}.pdf"
+    fig.savefig(
+        os.path.join("figures", "results", pdf_name), bbox_inches="tight"
+    )
     plt.close(fig)
 
 
@@ -1024,6 +1018,7 @@ def plot_norm_rmse_diff_single(
     fs=12,
     fill_between=False,
     color_map=None,
+    legend_ncol=None,
 ):
     """
     Plot normalized RMSE diff computed as
@@ -1105,14 +1100,17 @@ def plot_norm_rmse_diff_single(
     major_ticks = range(1, 16, 2)
     ax.set_xticks(major_ticks, minor=False)
     ax.set_xticklabels(major_ticks)
+    ax.tick_params(axis="both", which="major", labelsize=fs)
 
     handles, labels = ax.get_legend_handles_labels()
+    if legend_ncol is None:
+        legend_ncol = len(model_jsons) + 1
     plt.legend(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.15),
-        ncol=len(model_jsons) + 1,
+        bbox_to_anchor=(0.52, -0.15),
+        ncol=legend_ncol,
         fontsize=fs,
         frameon=False,
     )
@@ -1238,9 +1236,10 @@ def plot_scorecard(norm_rmse_diff, depths, base_save_name):
     # Save the figure
     save_dir = os.path.join("figures", "metrics", "scorecards")
     os.makedirs(save_dir, exist_ok=True)
-    full_save_path = os.path.join(save_dir, base_save_name)
-    for ext in ["png", "pdf"]:
-        fig.savefig(f"{full_save_path}.{ext}", bbox_inches="tight")
+    save_path = os.path.join(save_dir, base_save_name)
+    fig.savefig(f"{save_path}.png", bbox_inches="tight")
+    save_path = os.path.join("figures", "results", base_save_name)
+    fig.savefig(f"{save_path}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -1252,9 +1251,10 @@ def plot_rmse_vs_depth(
     fs=12,
     output_dir="rmse_depths",
     color_map=None,
+    legend_ncol=None,
 ):
     """
-    Plots RMSE (x-axis) vs depth (y-axis) for a given lead time.
+    Plots RMSE (x-axis) vs depth (y-axis) for every other lead time.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -1273,12 +1273,12 @@ def plot_rmse_vs_depth(
     sorted_pairs = sorted(zip(depths, var_indices), key=lambda x: x[0])
     depths, var_indices = zip(*sorted_pairs)
 
-    ncols = 3
-    nrows = 5
+    ncols = 4
+    nrows = 2
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
-        figsize=(ncols * 3, nrows * 2.5),
+        figsize=(ncols * 2.5, nrows * 2.5),
         sharex=True,
         sharey=True,
         constrained_layout=True,
@@ -1286,8 +1286,9 @@ def plot_rmse_vs_depth(
     axes = axes.flatten()
 
     # Loop over lead times
-    for t in range(n_steps):
-        ax = axes[t]
+    selected_lead_times = list(range(0, n_steps, 2))
+    for idx, t in enumerate(selected_lead_times):
+        ax = axes[idx]
         for model, (rmse_matrix, _) in rmse_std_all.items():
             rmse_depth = rmse_matrix[t, list(var_indices)]
             ax.plot(
@@ -1298,26 +1299,31 @@ def plot_rmse_vs_depth(
                 linewidth=2,
             )
         ax.set_title(
-            f"{chr(97+t)}) {constants.PLOT_NAMES_MAP[variable]}, day {t+1}",
+            f"{chr(97+idx)}) {constants.PLOT_NAMES_MAP[variable]}, {t+1}d",
             fontsize=fs,
         )
-        if t // ncols == nrows - 1:
+        if idx // ncols == nrows - 1:
             ax.set_xlabel(f"RMSE ({unit})", fontsize=fs)
-        if t % ncols == 0:
+        if idx % ncols == 0:
             ax.set_ylabel("Depth (m)", fontsize=fs)
-        ax.invert_yaxis()
+        ax.set_ylim(200, -7)
+        ax.tick_params(axis="both", which="major", labelsize=fs)
 
     handles, labels = axes[0].get_legend_handles_labels()
+    if legend_ncol is None:
+        legend_ncol = len(rmse_std_all)
     fig.legend(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.02),
-        ncol=len(rmse_std_all),
+        bbox_to_anchor=(0.52, -0.02),
+        ncol=legend_ncol,
         fontsize=fs,
         frameon=False,
     )
     save_path = os.path.join(output_dir, f"{variable}_rmse_depth.png")
+    fig.savefig(save_path, bbox_inches="tight")
+    save_path = os.path.join("figures", "results", f"{variable}_rmse_depth.pdf")
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
 
@@ -1648,7 +1654,7 @@ def main():
         "seacast_10y_base": "SeaCast (10y, w/o finetuning)",
         "t2m_permuted": "2m-temp. perm.",
         "tau_permuted": "Wind stress perm.",
-        "msl_permuted": "MSL perm.",
+        "msl_permuted": "MSLP perm.",
         "all_permuted": "All perm.",
         "seacast_analysis": "SeaCast (analysis init.)",
         "seacast_2": "SeaCast (Tuesdays)",
@@ -1739,6 +1745,7 @@ def main():
             fill_between=True,
             model_labels=model_labels,
             color_map=color_map,
+            legend_ncol=3,
         )
 
     if args.plot_acc:
@@ -1767,6 +1774,7 @@ def main():
             fill_between=False,
             model_labels=model_labels,
             color_map=color_map,
+            legend_ncol=3,
         )
 
     if args.plot_rmse:
@@ -1798,6 +1806,7 @@ def main():
                 n_steps=15,
                 fs=12,
                 fill_between=True,
+                legend_ncol=3,
             )
         plot_metric_single(
             "zos",
@@ -1809,6 +1818,7 @@ def main():
             fs=12,
             output_dir=output_dir,
             fill_between=True,
+            legend_ncol=3,
         )
 
     if args.plot_acc:
@@ -1839,6 +1849,7 @@ def main():
                 metric="acc",
                 n_steps=15,
                 fs=12,
+                legend_ncol=3,
             )
         plot_metric_single(
             "zos",
@@ -1849,6 +1860,7 @@ def main():
             n_steps=15,
             fs=12,
             output_dir=output_dir,
+            legend_ncol=3,
         )
 
     if args.plot_rmse:
@@ -2009,6 +2021,7 @@ def main():
                 n_steps=10,
                 fs=12,
                 fill_between=False,
+                legend_ncol=3,
             )
         plot_norm_rmse_diff_single(
             "zos",
@@ -2021,6 +2034,7 @@ def main():
             n_steps=10,
             fs=12,
             fill_between=False,
+            legend_ncol=3,
         )
 
         if args.plot_norm_rmse_diff:
@@ -2056,6 +2070,7 @@ def main():
                     n_steps=15,
                     fs=12,
                     fill_between=False,
+                    legend_ncol=3,
                 )
             plot_norm_rmse_diff_single(
                 "zos",
@@ -2068,6 +2083,7 @@ def main():
                 n_steps=15,
                 fs=12,
                 fill_between=False,
+                legend_ncol=3,
             )
 
     # Scorecards
@@ -2106,35 +2122,6 @@ def main():
     if args.plot_rmse_depth:
         output_dir = os.path.join("figures", "metrics", "rmse_depths")
         models = ["seacast", "seacast_analysis", "med_phy", "persistence"]
-        rmse_std_all = {}
-        for model in models:
-            json_path = os.path.join(
-                "data", args.dataset, "metrics", model, "rmse.json"
-            )
-            rmse_matrix, std_matrix = load_metric_std_steps(
-                json_path, n_steps=15, metric="rmse"
-            )
-            rmse_std_all[model] = (rmse_matrix, std_matrix)
-        for variable in ["uo", "vo", "so", "thetao"]:
-            plot_rmse_vs_depth(
-                rmse_std_all,
-                variable,
-                model_labels,
-                color_map=color_map,
-                n_steps=15,
-                fs=12,
-                output_dir=output_dir,
-            )
-
-    if args.plot_rmse_depth:
-        output_dir = os.path.join("figures", "metrics", "rmse_depths_models")
-        models = [
-            "seacast",
-            "seacast_base",
-            "seacast_10y",
-            "seacast_10y_base",
-            "med_phy",
-        ]
         rmse_std_all = {}
         for model in models:
             json_path = os.path.join(

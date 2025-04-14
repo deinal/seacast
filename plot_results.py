@@ -55,12 +55,8 @@ def create_in_situ_rmse_plot(
             json_path = os.path.join(
                 "data", dataset, "metrics", model, f"{var}_rmse.json"
             )
-            try:
-                with open(json_path, "r") as jf:
-                    data = json.load(jf)
-            except FileNotFoundError:
-                print(f"File not found: {json_path}")
-                continue
+            with open(json_path, "r") as jf:
+                data = json.load(jf)
 
             rmse = data["rmse"]
             n_lead = min(len(rmse), 15)
@@ -118,7 +114,7 @@ def create_in_situ_rmse_plot(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.03),
+        bbox_to_anchor=(0.52, -0.02),
         ncol=len(handles),
         fontsize=fs,
         frameon=False,
@@ -246,7 +242,7 @@ def plot_norm_rmse_diff(
         list(unique.values()),
         list(unique.keys()),
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.05),
+        bbox_to_anchor=(0.52, -0.02),
         ncol=3,
         fontsize=fs,
         frameon=False,
@@ -370,7 +366,7 @@ def plot_norm_rmse_diff_forcing(
         list(unique.values()),
         list(unique.keys()),
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.03),
+        bbox_to_anchor=(0.52, -0.02),
         ncol=len(unique),
         fontsize=fs,
         frameon=False,
@@ -465,7 +461,7 @@ def plot_rmse(
         list(unique.values()),
         list(unique.keys()),
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.03),
+        bbox_to_anchor=(0.52, -0.02),
         ncol=len(unique),
         fontsize=fs,
         frameon=False,
@@ -666,6 +662,164 @@ def plot_region(dataset, fs=11, out_dir="figures/results"):
     plt.close()
 
 
+def plot_mhw_metrics(
+    dataset, color_map, label_map, fs=11, out_dir="figures/results"
+):
+    """
+    Plot MHW binary forecast metrics.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    models = ["seacast", "med_phy", "persistence"]
+    detection_metrics = {}
+
+    for model in models:
+        metrics_dir = os.path.join("data", dataset, "metrics", model)
+        metrics_file = os.path.join(metrics_dir, "mhw_detection_metrics.json")
+        with open(metrics_file, "r") as f:
+            detection_metrics[model] = json.load(f)
+
+    metric_keys = ["sr", "pod", "bias", "ts", "ets", "hss"]
+    metric_titles = [
+        "Success ratio",
+        "Probability of detection",
+        "Bias score",
+        "Threat score",
+        "Equitable threat score",
+        "Heidke skill score",
+    ]
+
+    fig, axes = plt.subplots(
+        nrows=2, ncols=3, figsize=(3 * 3.5, 2 * 2.9), constrained_layout=True
+    )
+    fig.set_constrained_layout_pads(hspace=0.1)
+    axes = axes.flatten()
+    for idx, metric in enumerate(metric_keys):
+        ax = axes[idx]
+        ax.axvline(x=10, color="lightgray", linestyle="--", zorder=0)
+        for model in models:
+            metrics = detection_metrics[model]
+            lead_times = np.array(sorted([int(k) for k in metrics.keys()]))
+            metric_vals = np.array(
+                [metrics[str(L)][metric] for L in lead_times]
+            )
+            ci_lower = np.array(
+                [metrics[str(L)][f"{metric}_ci_lower"] for L in lead_times]
+            )
+            ci_upper = np.array(
+                [metrics[str(L)][f"{metric}_ci_upper"] for L in lead_times]
+            )
+
+            ax.plot(
+                lead_times,
+                metric_vals,
+                linestyle="-",
+                lw=2,
+                label=label_map[model],
+                color=color_map.get(model),
+            )
+            ax.fill_between(
+                lead_times,
+                ci_lower,
+                ci_upper,
+                color=color_map.get(model),
+                alpha=0.3,
+            )
+
+        ax.set_xticks(range(1, 16, 2))
+        ax.set_xticks(range(1, 15), minor=True)
+
+        ax.set_xlabel("Lead Time (days)", fontsize=fs)
+        ax.tick_params(axis="both", labelsize=fs)
+
+        ax.set_ylabel(metric_titles[idx], fontsize=fs)
+
+    handles, labels = axes.flatten()[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.52, -0.02),
+        ncol=len(handles),
+        fontsize=fs,
+        frameon=False,
+    )
+
+    plt.tight_layout()
+    for ext in ["png", "pdf"]:
+        out_path = os.path.join(out_dir, f"mhw_metrics.{ext}")
+        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+def plot_mhw_hss(
+    dataset, color_map, label_map, fs=11, out_dir="figures/results"
+):
+    """
+    Plot MHW Heidke skill score.
+    """
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    models = ["seacast", "med_phy", "persistence"]
+    detection_metrics = {}
+
+    for model in models:
+        metrics_file = os.path.join(
+            "data", dataset, "metrics", model, "mhw_detection_metrics.json"
+        )
+        with open(metrics_file, "r") as f:
+            detection_metrics[model] = json.load(f)
+
+    fig, ax = plt.subplots(figsize=(5, 4), constrained_layout=True)
+
+    ax.axvline(x=10, color="lightgray", linestyle="--", zorder=0)
+
+    for model in models:
+        metrics = detection_metrics.get(model)
+        if metrics is None:
+            continue
+
+        lead_times = np.array(sorted([int(k) for k in metrics.keys()]))
+        hss_values = np.array([metrics[str(L)]["hss"] for L in lead_times])
+        ci_lower = np.array(
+            [metrics[str(L)]["hss_ci_lower"] for L in lead_times]
+        )
+        ci_upper = np.array(
+            [metrics[str(L)]["hss_ci_upper"] for L in lead_times]
+        )
+
+        ax.plot(
+            lead_times,
+            hss_values,
+            lw=2,
+            label=label_map.get(model, model),
+            color=color_map.get(model),
+        )
+        ax.fill_between(
+            lead_times,
+            ci_lower,
+            ci_upper,
+            color=color_map.get(model),
+            alpha=0.3,
+        )
+
+    ax.set_xticks(range(1, int(lead_times.max()) + 1, 2))
+    ax.set_xticks(range(1, int(lead_times.max()) + 1), minor=True)
+    ax.set_xlabel("Lead Time (days)", fontsize=fs)
+    ax.set_ylabel("HSS", fontsize=fs)
+    ax.tick_params(axis="both", which="major", labelsize=fs)
+    ax.tick_params(axis="both", which="minor", labelsize=0)
+
+    ax.legend(fontsize=fs, loc="lower left", frameon=False)
+
+    for ext in ["png", "pdf"]:
+        output_path = os.path.join(out_dir, f"mhw_hss.{ext}")
+        fig.savefig(output_path, dpi=150, bbox_inches="tight")
+
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot forecast results.")
     parser.add_argument(
@@ -701,7 +855,7 @@ if __name__ == "__main__":
         "seacast_10y_base": "SeaCast (10y, w/o finetuning)",
         "t2m_permuted": "2m-temp. perm.",
         "tau_permuted": "Wind stress perm.",
-        "msl_permuted": "MSL perm.",
+        "msl_permuted": "MSLP perm.",
         "all_permuted": "All perm.",
     }
 
@@ -716,6 +870,10 @@ if __name__ == "__main__":
 
     out_dir = args.out_dir
     os.makedirs(out_dir, exist_ok=True)
+
+    plot_mhw_metrics(args.dataset, color_map, label_map)
+
+    plot_mhw_hss(args.dataset, color_map, label_map)
 
     create_in_situ_rmse_plot(args.dataset, color_map, label_map)
     plot_rmse(args.dataset, color_map, label_map, title_map)

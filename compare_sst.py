@@ -7,7 +7,6 @@ from glob import glob
 
 # Third-party
 import numpy as np
-import pandas as pd
 import xarray as xr
 
 # First-party
@@ -71,8 +70,6 @@ def compute_sst_error(
 
     # Open the observed SST dataset and match the time coordinate
     ds_obs = xr.open_dataset(sst_obs_file)
-    new_times = ds_obs["time"] - pd.Timedelta(days=1)
-    ds_obs = ds_obs.assign_coords(time=new_times)
 
     # Accumulate errors over samples
     lead_sq_errors_list = []  # list of arrays (n_lead,)
@@ -108,7 +105,7 @@ def compute_sst_error(
         for i, t in enumerate(forecast_sst.time.values):
             f_t = forecast_sst.sel(time=t)
             # Select SST and convert from Kelvin to Celsius
-            obs = ds_obs["sea_surface_temperature"].sel(time=t) - 273.15
+            obs = ds_obs["sea_surface_temperature"].sel(time=t)
 
             # Compute SE field for this lead time
             err_sq = (f_t - obs) ** 2
