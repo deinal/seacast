@@ -54,7 +54,6 @@ python download_data.py -d era5 -s 1987-01-01 -e 2024-06-30
 ```
 0 21 * * * python download_data.py --forecast >> forecasts.log 2>&1
 ```
-Evaluation data + predicted fields are stored on Zenodo (https://zenodo.org/records/13894915).
 
 5. Observations (assumes SLA and in situ data stored in raw dir)
 ```
@@ -179,7 +178,7 @@ For a full list of possible training options, check `python train_model.py --hel
 
 ## Evaluation
 
-SeaCast was evaluated on 1 GPU using `--eval test`:
+To produce the predictions on 1 GPU use `--eval test` and specify output directory (under `data`) with `--run_id seacast`:
 ```
 python train_model.py \
   --data_subset forecast \
@@ -200,6 +199,40 @@ python train_model.py \
 ```
 
 To instead try ENS forcing, use `--forcing_prefix ens_forcing`, to use analysis initial conditions use `--data_subset analysis`, or to permute the atmospheric forcing use `--permute_forcing tau_u tau_v t2m msl` (or a subset of forcing variables).
+
+For evaluation on analysis fields run:
+```
+python -u calculate_metrics.py --n_workers 10 --forecast seacast
+```
+
+For evaluation on observations run:
+```
+python compare_sst.py --forecast seacast
+python compare_mhw.py --forecast seacast
+python compare_sla.py --forecast seacast
+python compare_in_situ.py --forecast seacast
+```
+Note that for SLA and in-stu dask will parallelize to all available cores by default.
+
+Results can be plotted with
+```
+python plot_results.py
+```
+and for a more exhaustive set of plots run:
+```
+python plot_metrics.py \
+  --plot_group_bias \
+  --plot_forecast \
+  --plot_rmse \
+  --plot_acc \
+  --plot_forecast_vertical \
+  --plot_scorecard \
+  --plot_rmse_depth \
+  --plot_norm_rmse_diff \
+  --plot_spatial_rmse_diff \
+  --plot_vertical_rmse_diff \
+  --file data/mediterranean/predictions/seacast/for_data_20241001.npy
+```
 
 ## File structure
 
