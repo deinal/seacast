@@ -1,19 +1,17 @@
 
 # SeaCast
 
-[![arXiv](https://img.shields.io/badge/arXiv-2410.11807-b31b1b.svg)](https://arxiv.org/abs/2410.11807) [![zenodo](https://img.shields.io/badge/zenodo-13894915-green.svg)](https://zenodo.org/records/13894915)
+[![arXiv](https://img.shields.io/badge/arXiv-2410.11807-b31b1b.svg)](https://arxiv.org/abs/2410.11807) [![huggingface](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-blue)](https://huggingface.co/datasets/deinal/seacast-data)
 
 <p align="middle">
     <img src="figures/hi_graph.png" width="700">
 </p>
 
-The code is based on Neural-LAM: a repository of graph-based neural weather prediction models for limited area modeling. Up-to-date developments for atmospheric forecasting in the [original repo](https://github.com/mllam/neural-lam).
-
-The repository contains three meshgraphnet variations:
+SeaCast is based on [Neural-LAM](https://github.com/mllam/neural-lam) (data-driven limited area weather forecasting). This repository contains mesh variations similar to:
 
 * The graph-based model from [Keisler (2022)](https://arxiv.org/abs/2202.07575).
 * GraphCast, by [Lam et al. (2023)](https://arxiv.org/abs/2212.12794).
-* The hierarchical model from [Oskarsson et al. (2023)](https://arxiv.org/abs/2309.17370).
+* The hierarchical model from [Oskarsson et al. (2024)](https://arxiv.org/abs/2406.04759).
 
 ## Dependencies
 
@@ -25,6 +23,19 @@ SeaCast was trained using Python 3.10 and
 Complete set of packages can be installed with `pip install -r requirements.txt`.
 
 ## Data
+
+### Quickstart with preprocessed data
+
+Preprocessed data used in the associated article is stored on Hugging Face (https://huggingface.co/datasets/deinal/seacast-data). This data can be downloaded using their CLI:
+
+```
+pip install huggingface_hub
+huggingface-cli download deinal/seacast-data --repo-type dataset --local-dir .  --exclude "README.md" --exclude ".gitattributes"
+```
+
+The full data folder (4.77 TB) including all training and validation files is stored on LUMI object storage (https://462000711.lumidata.eu/seacast-data). You can fetch all of them with [files.txt](https://drive.google.com/file/d/1rG9vUiTg0jmikFJz8pxVnHoault1fNBL/view?usp=sharing) by running `wget -i files.txt`.
+
+The following subsections cover how the data was originally fetched and preprocessed.
 
 ### Download instructions
 
@@ -45,25 +56,10 @@ python download_data.py -d era5 -s 1987-01-01 -e 2024-06-30
 ```
 Evaluation data + predicted fields are stored on Zenodo (https://zenodo.org/records/13894915).
 
-5. Satellite SST
+5. Observations (assumes SLA and in situ data stored in raw dir)
 ```
-import copernicusmarine as cm
-
-ds = cm.open_dataset(
-  dataset_id="SST_MED_SST_L4_NRT_OBSERVATIONS_010_004_a_V2",
-  variables=["analysed_sst"],
-  minimum_longitude=-6,
-  maximum_longitude=36.25,
-  minimum_latitude=30.25,
-  maximum_latitude=46,
-  start_datetime="2024-07-24T00:00:00",
-  end_datetime="2024-08-20T23:59:59",
-)
-
-ds.to_netcdf("data/mediterranean/samples/test/sst.nc")
+python prepare_observations.py -d sst mhw sla in_situ
 ```
-
-6. Observations manually downloaded from https://doi.org/10.48670/moi-00044
 
 ### State preparation
 
@@ -133,23 +129,50 @@ wandb off
 
 ### Train models
 
-SeaCast was trained on 4 nodes with 8 GPUs each:
+SeaCast is first trained on reanalysis data, using 8 nodes:
 ```
 python train_model.py \
-  --epochs 200 \
+  --n_nodes 8 \
   --n_workers 4 \
+  --epochs 200 \
+  --lr 0.001 \
   --batch_size 1 \
   --step_length 1 \
-  --ar_steps 4 \
-  --lr 0.001 \
+  --ar_steps 1 \
   --optimizer adamw \
   --scheduler cosine \
-  --finetune_start 0.6 \
+  --processor_layers 3 \
+  --hidden_dim 256 \
   --model hi_lam \
   --graph hierarchical \
-  --processor_layers 4 \
-  --hidden_dim 128 \
-  --n_nodes 4
+  --precision bf16-mixed \
+  --data_subset reanalysis \
+  --run_id all_base
+```
+To train the 10y model from the paper add the flag `--start_date 20140101`.
+
+Models are finetuned on analysis data, using 1 node:
+```
+python train_model.py \
+  --load saved_models/hi_lam-3x256-all_base/min_val_loss.ckpt \
+  --n_nodes 1 \
+  --n_workers 4 \
+  --epochs 30 \
+  --lr 1e-5 \
+  --initial_lr 1e-7 \
+  --batch_size 1 \
+  --step_length 1 \
+  --ar_steps 3 \
+  --finetune_start 0.34 \
+  --optimizer adamw \
+  --scheduler cosine \
+  --processor_layers 3 \
+  --hidden_dim 256 \
+  --model hi_lam \
+  --graph hierarchical \
+  --precision bf16-mixed \
+  --data_subset analysis \
+  --run_id all_final
 ```
 
 For a full list of possible training options, check `python train_model.py --help`.
@@ -166,13 +189,17 @@ python train_model.py \
   --step_length 1 \
   --model hi_lam \
   --graph hierarchical \
-  --processor_layers 4 \
-  --hidden_dim 128 \
+  --processor_layers 3 \
+  --hidden_dim 256 \
   --n_example_pred 1 \
   --store_pred 1 \
   --eval test \
-  --load saved_models/hi_lam-4x128-06_26_19-6986/last.ckpt
+  --precision bf16-mixed \
+  --load model_weights/final.ckpt \
+  --run_id seacast
 ```
+
+To instead try ENS forcing, use `--forcing_prefix ens_forcing`, to use analysis initial conditions use `--data_subset analysis`, or to permute the atmospheric forcing use `--permute_forcing tau_u tau_v t2m msl` (or a subset of forcing variables).
 
 ## File structure
 
@@ -221,10 +248,6 @@ data
 ├── ...
 └── datasetN
 ```
-
-### Graphs
-
-The `graphs` directory contains generated graph structures that can be used by different graph-based models. Refer to https://github.com/mllam/neural-lam for more details.
 
 ## Development
 

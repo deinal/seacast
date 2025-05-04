@@ -771,7 +771,7 @@ def plot_mhw_hss(
         with open(metrics_file, "r") as f:
             detection_metrics[model] = json.load(f)
 
-    fig, ax = plt.subplots(figsize=(5, 4), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(4.2, 3.4), constrained_layout=True)
 
     ax.axvline(x=10, color="lightgray", linestyle="--", zorder=0)
 
