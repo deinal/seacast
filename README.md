@@ -1,7 +1,7 @@
 
 # SeaCast
 
-[![arXiv](https://img.shields.io/badge/arXiv-2410.11807-b31b1b.svg)](https://arxiv.org/abs/2410.11807) [![huggingface](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-blue)](https://huggingface.co/datasets/deinal/seacast-data)
+[![arXiv](https://img.shields.io/badge/arXiv-2506.23900-b31b1b.svg)](https://arxiv.org/abs/2506.23900) [![huggingface](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-blue)](https://huggingface.co/datasets/deinal/seacast-data)
 
 <p align="middle">
     <img src="figures/hi_graph.png" width="700">
@@ -50,7 +50,7 @@ python download_data.py -d analysis -s 2021-11-01 -e 2025-01-14
 python download_data.py -d era5 -s 1987-01-01 -e 2024-06-30
 ```
 
-4. Daily forecasts were fetched  with the ECMWF [open data client](https://pypi.org/project/ecmwf-opendata/) and CMEMS python client for the months of July and August 2024 using a cronjob:
+4. Daily forecasts were fetched  with the ECMWF [open data client](https://pypi.org/project/ecmwf-opendata/) and CMEMS python client using a daily cronjob:
 ```
 0 21 * * * python download_data.py --forecast >> forecasts.log 2>&1
 ```
@@ -291,6 +291,15 @@ pre-commit run --all-files
 from the root directory of the repository.
 
 ## Cite
+
+```
+@article{holmberg2025accurate,
+  title={Accurate Mediterranean Sea forecasting via graph-based deep learning},
+  author={Holmberg, Daniel and Clementi, Emanuela and Epicoco, Italo and Roos, Teemu},
+  journal={arXiv preprint arXiv:2506.23900},
+  year={2025}
+}
+```
 
 ```
 @inproceedings{holmberg2024regional,
