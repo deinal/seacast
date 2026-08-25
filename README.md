@@ -13,6 +13,30 @@ SeaCast is based on [Neural-LAM](https://github.com/mllam/neural-lam) (data-driv
 * GraphCast, by [Lam et al. (2023)](https://arxiv.org/abs/2212.12794).
 * The hierarchical model from [Oskarsson et al. (2024)](https://arxiv.org/abs/2406.04759).
 
+## Citation
+
+```
+@article{holmberg2025accurate,
+  title={Accurate Mediterranean Sea forecasting via graph-based deep learning},
+  author={Holmberg, Daniel and Clementi, Emanuela and Epicoco, Italo and Roos, Teemu},
+  journal={Scientific Reports},
+  volume={15},
+  number={1},
+  pages={45051},
+  year={2025},
+  publisher={Nature Publishing Group UK London}
+}
+```
+
+```
+@inproceedings{holmberg2024regional,
+    title={Regional Ocean Forecasting with Hierarchical Graph Neural Networks},
+    author={Holmberg, Daniel and Clementi, Emanuela and Roos, Teemu},
+    booktitle={NeurIPS 2024 Workshop on Tackling Climate Change with Machine Learning},
+    year={2024}
+}
+```
+
 ## Dependencies
 
 SeaCast was trained using Python 3.10 and
@@ -289,23 +313,3 @@ GitHub actions are implemented for code checks. Run before commits:
 pre-commit run --all-files
 ```
 from the root directory of the repository.
-
-## Cite
-
-```
-@article{holmberg2025accurate,
-  title={Accurate Mediterranean Sea forecasting via graph-based deep learning},
-  author={Holmberg, Daniel and Clementi, Emanuela and Epicoco, Italo and Roos, Teemu},
-  journal={arXiv preprint arXiv:2506.23900},
-  year={2025}
-}
-```
-
-```
-@inproceedings{holmberg2024regional,
-    title={Regional Ocean Forecasting with Hierarchical Graph Neural Networks},
-    author={Holmberg, Daniel and Clementi, Emanuela and Roos, Teemu},
-    booktitle={NeurIPS 2024 Workshop on Tackling Climate Change with Machine Learning},
-    year={2024}
-}
-```
